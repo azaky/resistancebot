@@ -120,6 +120,8 @@ type Game struct {
 
 	cAddPlayer          chan error
 	cAddPlayerData      chan *Player
+	cAbortData          chan string
+	cAbort              chan error
 	cStartData          chan string
 	cStart              chan error
 	cPick               chan error
@@ -136,7 +138,7 @@ type Game struct {
 
 type EventHandler interface {
 	OnCreate(*Game)
-	OnAbort(*Game)
+	OnAbort(*Game, *Player)
 	OnStart(*Game, *Player, error)
 	OnAddPlayer(*Game, *Player, error)
 	OnStartPick(*Game, *Player)
@@ -176,6 +178,8 @@ func NewGame(id string, eventHandler EventHandler) *Game {
 		Missions:            []*Mission{},
 		cAddPlayer:          make(chan error),
 		cAddPlayerData:      make(chan *Player),
+		cAbortData:          make(chan string),
+		cAbort:              make(chan error),
 		cStartData:          make(chan string),
 		cStart:              make(chan error),
 		cPick:               make(chan error),
@@ -248,14 +252,18 @@ func (game *Game) daemon() {
 			log.Println("c:initTimer")
 			startError = game.start("timer")
 			goto start
+
+		case aborter := <-game.cAbortData:
+			log.Println("c:abort")
+			game.abort(aborter)
+			return
 		}
 	}
 
 start:
 	initTimer.Stop()
 	if startError != nil {
-		game.cleanup()
-		go game.OnAbort(game)
+		game.abort("system")
 		return
 	}
 	game.Round = 1
@@ -350,6 +358,8 @@ mission_done:
 }
 
 func (game *Game) cleanup() {
+	lock.Lock()
+	defer lock.Unlock()
 	game.State = STATE_IDLE
 	delete(games, game.ID)
 }
@@ -383,8 +393,23 @@ func (game *Game) addPlayer(newPlayer *Player) error {
 	return nil
 }
 
+func (game *Game) Abort(aborter string) error {
+	game.cAbortData <- aborter
+	return <-game.cAbort
+}
+
+func (game *Game) abort(aborter string) error {
+	p := game.FindPlayerByID(aborter)
+	if p == nil && aborter != "system" {
+		return fmt.Errorf("Only players in the game can abort the game")
+	}
+	game.cleanup()
+	go game.OnAbort(game, p)
+	return nil
+}
+
 func (game *Game) Start(starter string) error {
-	if game.State != STATE_INITIALIZED {
+	if game.State == STATE_INITIALIZED {
 		return fmt.Errorf("Game already started")
 	}
 	game.cStartData <- starter

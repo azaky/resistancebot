@@ -10,8 +10,8 @@ type cliHandler struct{}
 func (h *cliHandler) OnCreate(game *Game) {
 	log.Printf("[OnCreate] Game created\n")
 }
-func (h *cliHandler) OnAbort(game *Game) {
-	log.Printf("[OnAbort] Game aborted\n")
+func (h *cliHandler) OnAbort(game *Game, player *Player) {
+	log.Printf("[OnAbort] Game aborted by %s\n", player.Name)
 }
 func (h *cliHandler) OnStart(game *Game, starter *Player, err error) {
 	if err != nil {

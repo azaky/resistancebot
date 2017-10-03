@@ -30,6 +30,7 @@ func NewLineBot(client *linebot.Client) *LineBot {
 	}
 	b.registerTextPattern(`^\s*.echo\s*(.*)$`, b.echo)
 	b.registerTextPattern(`^\s*.create\s*$`, b.createGame)
+	b.registerTextPattern(`^\s*.abort\s*$`, b.abortGame)
 	b.registerTextPattern(`^\s*.join\s*$`, b.joinGame)
 	b.registerPostbackPattern(`^\s*.join\s*$`, b.joinGame)
 	b.registerTextPattern(`^\s*.start\s*$`, b.startGame)
@@ -299,6 +300,28 @@ func (b *LineBot) startGame(event *linebot.Event, args ...string) {
 	game.Start(user.UserID)
 }
 
+func (b *LineBot) abortGame(event *linebot.Event, args ...string) {
+	if event.Source.Type == linebot.EventSourceTypeUser {
+		// don't bother reply
+		return
+	}
+
+	user, err := b.getUserInfo(event.Source)
+	if err != nil {
+		b.warnIncompatibility(event)
+		return
+	}
+
+	id := util.GetGameID(event.Source)
+
+	if !GameExistsByID(id) {
+		return
+	}
+
+	game := LoadGame(id)
+	game.Abort(user.UserID)
+}
+
 func (b *LineBot) OnCreate(game *Game) {
 	// Create a postback button to join
 	b.pushPostback(game.ID, "New Game", `Click here or type ".join" to join the game`, map[string]string{
@@ -306,9 +329,28 @@ func (b *LineBot) OnCreate(game *Game) {
 	})
 }
 
-func (b *LineBot) OnAbort(*Game)                             {}
-func (b *LineBot) OnStart(*Game, *Player, error)             {}
-func (b *LineBot) OnAddPlayer(*Game, *Player, error)         {}
+func (b *LineBot) OnAbort(game *Game, aborter *Player) {
+	b.push(game.ID, fmt.Sprintf("Game aborted by %s.", aborter.Name))
+}
+
+func (b *LineBot) OnStart(game *Game, starter *Player, err error) {
+	if err != nil {
+		b.push(game.ID, err.Error())
+	} else if starter == nil {
+		b.push(game.ID, `Game started.`)
+	} else {
+		b.push(game.ID, fmt.Sprintf(`Game started by %s.`, starter.Name))
+	}
+}
+
+func (b *LineBot) OnAddPlayer(game *Game, player *Player, err error) {
+	if err != nil {
+		b.push(game.ID, err.Error())
+	} else {
+		b.push(game.ID, fmt.Sprintf("%s is added to the game.", player.Name))
+	}
+}
+
 func (b *LineBot) OnStartPick(*Game, *Player)                {}
 func (b *LineBot) OnPick(*Game, *Player, *Player, error)     {}
 func (b *LineBot) OnUnpick(*Game, *Player, *Player, error)   {}
