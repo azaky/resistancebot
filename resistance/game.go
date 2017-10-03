@@ -279,7 +279,7 @@ start:
 	game.Round = 1
 
 pick:
-	time.Sleep(3 * time.Second)
+	time.Sleep(1 * time.Second)
 	game.State = STATE_PICK
 	game.VotingRound++
 	game.LeaderIndex++
@@ -305,11 +305,16 @@ pick:
 			log.Println("c:abort")
 			game.abort(aborter)
 			return
+
+		case <-game.cShowPlayersData:
+			log.Println("c:showPlayers")
+			game.showPlayers()
+			game.cShowPlayers <- nil
 		}
 	}
 
 voting:
-	time.Sleep(3 * time.Second)
+	time.Sleep(1 * time.Second)
 	game.State = STATE_VOTING
 	game.Votes = make(map[string]bool)
 	go game.OnStartVoting(game, game.leader(), game.GetPicks())
@@ -327,6 +332,11 @@ voting:
 			log.Println("c:abort")
 			game.abort(aborter)
 			return
+
+		case <-game.cShowPlayersData:
+			log.Println("c:showPlayers")
+			game.showPlayers()
+			game.cShowPlayers <- nil
 		}
 	}
 
@@ -364,6 +374,11 @@ mission:
 			log.Println("c:abort")
 			game.abort(aborter)
 			return
+
+		case <-game.cShowPlayersData:
+			log.Println("c:showPlayers")
+			game.showPlayers()
+			game.cShowPlayers <- nil
 		}
 	}
 
@@ -657,6 +672,8 @@ func (game *Game) executeMission(data executeMissionData) error {
 	player := game.FindPlayerByID(data.PlayerID)
 	// if player is resistance, vote true no matter what, i.e. ignore
 	if player.Role == ROLE_RESISTANCE {
+		// don't forget to call event handler
+		go game.OnExecuteMission(game, player, data.Success)
 		return nil
 	}
 

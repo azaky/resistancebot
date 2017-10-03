@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/azaky/resistancebot/util"
@@ -43,6 +44,7 @@ func NewLineBot(client *linebot.Client) *LineBot {
 	b.registerPostbackPattern(`^\.pick:(\S+)$`, b.pick)
 	b.registerPostbackPattern(`^\.donepick$`, b.donepick)
 	b.registerPostbackPattern(`^\.vote:(\S+):(\S+)$`, b.vote)
+	b.registerPostbackPattern(`^\.executemission:(\S+):(\S+)$`, b.executeMission)
 	return b
 }
 
@@ -184,24 +186,24 @@ func (b *LineBot) EventHandler(w http.ResponseWriter, req *http.Request) {
 		switch event.Type {
 
 		case linebot.EventTypeJoin:
-			b.handleJoin(event)
+			go b.handleJoin(event)
 
 		case linebot.EventTypeFollow:
-			b.handleFollow(event)
+			go b.handleFollow(event)
 
 		case linebot.EventTypeLeave:
 			fallthrough
 		case linebot.EventTypeUnfollow:
-			b.handleUnfollow(event)
+			go b.handleUnfollow(event)
 
 		case linebot.EventTypeMessage:
 			switch message := event.Message.(type) {
 			case *linebot.TextMessage:
-				b.handleTextMessage(event, message)
+				go b.handleTextMessage(event, message)
 			}
 
 		case linebot.EventTypePostback:
-			b.handlePostback(event, event.Postback)
+			go b.handlePostback(event, event.Postback)
 		}
 	}
 }
@@ -384,6 +386,9 @@ func (b *LineBot) donepick(event *linebot.Event, args ...string) {
 }
 
 func (b *LineBot) vote(event *linebot.Event, args ...string) {
+	if len(args) < 3 {
+		return
+	}
 	id := args[1]
 	vote := args[2] == "ok"
 
@@ -393,6 +398,21 @@ func (b *LineBot) vote(event *linebot.Event, args ...string) {
 
 	game := LoadGame(id)
 	game.Vote(event.Source.UserID, vote)
+}
+
+func (b *LineBot) executeMission(event *linebot.Event, args ...string) {
+	if len(args) < 3 {
+		return
+	}
+	id := args[1]
+	vote := args[2] == "success"
+
+	if !GameExistsByID(id) {
+		return
+	}
+
+	game := LoadGame(id)
+	game.ExecuteMission(event.Source.UserID, vote)
 }
 
 func (b *LineBot) OnCreate(game *Game) {
@@ -431,12 +451,19 @@ func (b *LineBot) OnStart(game *Game, starter *Player, err error) {
 	} else {
 		b.push(game.ID, fmt.Sprintf(`Game started by %s. Check your PM to find out your role.`, starter.Name))
 	}
+	// TODO: send out overview (#spies, #members each round, etc)
 
 	for _, player := range game.Players {
 		if player.Role == ROLE_RESISTANCE {
 			b.push(player.ID, fmt.Sprintf("%s, you are a Resistance", player.Name))
 		} else {
-			b.push(player.ID, fmt.Sprintf("%s, you are a Spy", player.Name))
+			var spies []string
+			for _, spy := range game.Players {
+				if spy.Role == ROLE_SPY && spy.ID != player.ID {
+					spies = append(spies, spy.Name)
+				}
+			}
+			b.push(player.ID, fmt.Sprintf("%s, you are a Spy. Other spies are %s", player.Name, strings.Join(spies, ", ")))
 		}
 	}
 }
@@ -484,7 +511,7 @@ func (b *LineBot) OnStartPick(game *Game, leader *Player) {
 	buttons = append(buttons, pair{"Done", ".donepick"})
 	// TODO: specify number of picks
 	// TODO: specify number of fails
-	b.pushPostback(game.ID, fmt.Sprintf("Mission #%d", game.Round), fmt.Sprintf("This mission needs %d people", 1), buttons...)
+	b.pushPostback(game.ID, fmt.Sprintf("Mission #%d, Leader #%d", game.Round, game.VotingRound), fmt.Sprintf("This mission needs %d people", 1), buttons...)
 	b.push(game.ID, fmt.Sprintf("Only for %s: choose people you trust the most to go for the mission. This mission needs %d people. Choose them wisely.", leader.Name, 1))
 }
 
@@ -544,7 +571,7 @@ func (b *LineBot) OnStartVoting(game *Game, leader *Player, members []*Player) {
 	b.push(game.ID, buffer.String())
 
 	b.pushPostback(game.ID,
-		fmt.Sprintf("Mission #%d, Vote #%d", game.Round, game.VotingRound),
+		fmt.Sprintf("Mission #%d, Leader #%d", game.Round, game.VotingRound),
 		"Vote here",
 		pair{"OK", ".vote:" + game.ID + ":ok"},
 		pair{"NO", ".vote:" + game.ID + ":no"},
@@ -584,8 +611,64 @@ func (b *LineBot) OnVotingDone(game *Game, votes map[string]bool, majority bool)
 	b.push(game.ID, buffer.String())
 }
 
-func (b *LineBot) OnStartMission(*Game, []*Player)       {}
-func (b *LineBot) OnExecuteMission(*Game, *Player, bool) {}
-func (b *LineBot) OnMissionDone(*Game, *Mission)         {}
-func (b *LineBot) OnSpyWin(*Game, string)                {}
-func (b *LineBot) OnResistanceWin(*Game, string)         {}
+func (b *LineBot) OnStartMission(game *Game, members []*Player) {
+	var buffer bytes.Buffer
+	buffer.WriteString(fmt.Sprintf("Mission #%d", game.Round))
+	buffer.WriteString("\n\nMembers:")
+	for _, member := range members {
+		buffer.WriteString(fmt.Sprintf("\n- %s", member.Name))
+	}
+	buffer.WriteString(fmt.Sprintf("\n\nFor all members, check your PM to succeed/fail this mission. If you do not choose, it will be considered as a success. You have %d seconds.", conf.GameMissionTime))
+	b.push(game.ID, buffer.String())
+
+	for _, member := range members {
+		b.pushPostback(member.ID,
+			fmt.Sprintf("Mission #%d", game.Round),
+			fmt.Sprintf("Choose the outcome of this mission. You have %d seconds", conf.GameMissionTime),
+			pair{"Success", ".executemission:" + game.ID + ":success"},
+			pair{"Fail", ".executemission:" + game.ID + ":fail"},
+		)
+	}
+}
+
+func (b *LineBot) OnExecuteMission(game *Game, player *Player, success bool) {
+	if player.Role == ROLE_RESISTANCE {
+		if success {
+			b.push(player.ID, "You choose to succeed this mission.")
+		} else {
+			b.push(player.ID, "You cannot fail this mission as you are a Resistance")
+		}
+	} else {
+		if success {
+			b.push(player.ID, "You choose to succeed this mission.")
+		} else {
+			b.push(player.ID, "You choose to fail this mission")
+		}
+	}
+}
+
+func (b *LineBot) OnMissionDone(game *Game, mission *Mission) {
+	var buffer bytes.Buffer
+	buffer.WriteString(fmt.Sprintf("Mission #%d", game.Round))
+	buffer.WriteString("\n\nMembers:")
+	for _, member := range mission.Members {
+		buffer.WriteString(fmt.Sprintf("\n- %s", member.Name))
+	}
+	if mission.Success {
+		buffer.WriteString("\n\nOutcome: Success")
+	} else {
+		buffer.WriteString("\n\nOutcome: Fail")
+	}
+	buffer.WriteString(fmt.Sprintf(" (%d success, %d fail)", mission.NSuccess(), mission.NFail()))
+	b.push(game.ID, buffer.String())
+}
+
+func (b *LineBot) OnSpyWin(game *Game, message string) {
+	b.push(game.ID, message)
+	b.OnShowPlayers(game, game.Players, -1, true)
+}
+
+func (b *LineBot) OnResistanceWin(game *Game, message string) {
+	b.push(game.ID, message)
+	b.OnShowPlayers(game, game.Players, -1, true)
+}
