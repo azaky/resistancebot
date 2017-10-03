@@ -1,10 +1,10 @@
-hash: 2c9b88b93f65c8f51e9e477b9958fefa908f942d162abc7938a608e9b587f4e8
-updated: 2017-10-03T20:09:34.949065165+07:00
+hash: b9786f820571fabcb0f677f1da226c9e01014045c46a30e74855b06c9abfe0b0
+updated: 2017-10-03T20:12:49.84204922+07:00
 imports:
 - name: github.com/kelseyhightower/envconfig
   version: f611eb38b3875cc3bd991ca91c51d06446afa14c
 - name: github.com/line/line-bot-sdk-go
-  version: a20a8ef13587611afb3b8d70c9a6d916aa30d882
+  version: d0ee4ad2b49fa50ae881f7c92b430cedeeb7b98e
   subpackages:
   - linebot
 - name: github.com/patrickmn/go-cache
