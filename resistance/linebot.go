@@ -83,6 +83,14 @@ func (b *LineBot) replyPostback(event *linebot.Event, title, text string, data m
 	return err
 }
 
+func (b *LineBot) replyRaw(event *linebot.Event, lineMessages ...linebot.Message) error {
+	_, err := b.client.ReplyMessage(event.ReplyToken, lineMessages...).Do()
+	if err != nil {
+		b.log("Error replying to %+v: %s", event.Source, err.Error())
+	}
+	return err
+}
+
 func (b *LineBot) push(to string, messages ...string) error {
 	var lineMessages []linebot.Message
 	for _, message := range messages {
@@ -176,11 +184,11 @@ func (b *LineBot) EventHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func (b *LineBot) handleJoin(event *linebot.Event) {
-	// TODO:
+	b.reply(event, `Thanks for adding me! Type ".create" to start a new game.`)
 }
 
 func (b *LineBot) handleFollow(event *linebot.Event) {
-
+	b.reply(event, `Thanks for adding me! Invite me to group chats to play.`)
 }
 
 func (b *LineBot) handleUnfollow(event *linebot.Event) {
@@ -188,6 +196,7 @@ func (b *LineBot) handleUnfollow(event *linebot.Event) {
 }
 
 func (b *LineBot) handleTextMessage(event *linebot.Event, message *linebot.TextMessage) {
+	b.log("[MESSAGE] %+v: %s", event.Source, message.Text)
 	for regex, handler := range b.textPatterns {
 		matches := regex.FindStringSubmatch(message.Text)
 		if matches != nil {
