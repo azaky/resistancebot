@@ -277,10 +277,9 @@ start:
 		return
 	}
 	game.Round = 1
-	// give a moment for OnStart to fire up
-	time.Sleep(3 * time.Second)
 
 pick:
+	time.Sleep(3 * time.Second)
 	game.State = STATE_PICK
 	game.VotingRound++
 	game.LeaderIndex++
@@ -310,6 +309,7 @@ pick:
 	}
 
 voting:
+	time.Sleep(3 * time.Second)
 	game.State = STATE_VOTING
 	game.Votes = make(map[string]bool)
 	go game.OnStartVoting(game, game.leader(), game.GetPicks())
@@ -332,7 +332,11 @@ voting:
 
 voting_done:
 	majority := game.calculateVote()
-	go game.OnVotingDone(game, game.Votes, majority)
+	votes := make(map[string]bool)
+	for id, vote := range game.Votes {
+		votes[game.FindPlayerByID(id).Name] = vote
+	}
+	go game.OnVotingDone(game, votes, majority)
 	if majority {
 		goto mission
 	} else if game.VotingRound == conf.GameVotingRound {

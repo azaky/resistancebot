@@ -14,6 +14,10 @@ import (
 )
 
 type messageHandler func(*linebot.Event, ...string)
+type pair struct {
+	Key   string
+	Value string
+}
 
 type LineBot struct {
 	client           *linebot.Client
@@ -33,11 +37,12 @@ func NewLineBot(client *linebot.Client) *LineBot {
 	b.registerTextPattern(`^\s*\.create\s*$`, b.createGame)
 	b.registerTextPattern(`^\s*\.abort\s*$`, b.abortGame)
 	b.registerTextPattern(`^\s*\.join\s*$`, b.joinGame)
-	b.registerPostbackPattern(`^\s*\.join\s*$`, b.joinGame)
 	b.registerTextPattern(`^\s*\.players?\s*$`, b.showPlayers)
 	b.registerTextPattern(`^\s*\.start\s*$`, b.startGame)
-	b.registerPostbackPattern(`^\s*\.pick:(\S+)\s*$`, b.pick)
-	b.registerPostbackPattern(`^\s*\.donepick\s*$`, b.donepick)
+	b.registerPostbackPattern(`^\.join$`, b.joinGame)
+	b.registerPostbackPattern(`^\.pick:(\S+)$`, b.pick)
+	b.registerPostbackPattern(`^\.donepick$`, b.donepick)
+	b.registerPostbackPattern(`^\.vote:(\S+):(\S+)$`, b.vote)
 	return b
 }
 
@@ -75,10 +80,10 @@ func (b *LineBot) reply(event *linebot.Event, messages ...string) error {
 	return err
 }
 
-func (b *LineBot) replyPostback(event *linebot.Event, title, text string, data map[string]string) error {
+func (b *LineBot) replyPostback(event *linebot.Event, title, text string, data ...pair) error {
 	var actions []linebot.TemplateAction
-	for key, value := range data {
-		actions = append(actions, linebot.NewPostbackTemplateAction(key, value, ""))
+	for _, p := range data {
+		actions = append(actions, linebot.NewPostbackTemplateAction(p.Key, p.Value, ""))
 	}
 	message := linebot.NewTemplateMessage(title, linebot.NewButtonsTemplate("", title, text, actions...))
 	_, err := b.client.ReplyMessage(event.ReplyToken, message).Do()
@@ -108,10 +113,10 @@ func (b *LineBot) push(to string, messages ...string) error {
 	return err
 }
 
-func (b *LineBot) pushPostback(to string, title, text string, data map[string]string) error {
+func (b *LineBot) pushPostback(to string, title, text string, data ...pair) error {
 	var actions []linebot.TemplateAction
-	for key, value := range data {
-		actions = append(actions, linebot.NewPostbackTemplateAction(key, value, ""))
+	for _, p := range data {
+		actions = append(actions, linebot.NewPostbackTemplateAction(p.Key, p.Value, ""))
 	}
 	message := linebot.NewTemplateMessage(title, linebot.NewButtonsTemplate("", title, text, actions...))
 	_, err := b.client.PushMessage(to, message).Do()
@@ -121,10 +126,10 @@ func (b *LineBot) pushPostback(to string, title, text string, data map[string]st
 	return err
 }
 
-func (b *LineBot) pushTextback(to string, title, text string, data map[string]string) error {
+func (b *LineBot) pushTextback(to string, title, text string, data ...pair) error {
 	var actions []linebot.TemplateAction
-	for key, value := range data {
-		actions = append(actions, linebot.NewPostbackTemplateAction(key, "?", value))
+	for _, p := range data {
+		actions = append(actions, linebot.NewPostbackTemplateAction(p.Key, "?", p.Value))
 	}
 	message := linebot.NewTemplateMessage(title, linebot.NewButtonsTemplate("", title, text, actions...))
 	_, err := b.client.PushMessage(to, message).Do()
@@ -378,17 +383,33 @@ func (b *LineBot) donepick(event *linebot.Event, args ...string) {
 	game.DonePick(event.Source.UserID)
 }
 
+func (b *LineBot) vote(event *linebot.Event, args ...string) {
+	id := args[1]
+	vote := args[2] == "ok"
+
+	if !GameExistsByID(id) {
+		return
+	}
+
+	game := LoadGame(id)
+	game.Vote(event.Source.UserID, vote)
+}
+
 func (b *LineBot) OnCreate(game *Game) {
 	// Create a postback button to join
-	b.pushTextback(game.ID, "New Game", "Click here to join", map[string]string{
-		"Join":  ".join",
-		"Start": ".start",
-	})
-	b.push(game.ID, `Commands:
-.join: Join game
-.start: Start game
-.abort: Abort game
-.players: Show players`)
+	b.pushTextback(game.ID,
+		"New Game",
+		"Commands:",
+		pair{"Join", ".join"},
+		pair{"Start", ".start"},
+		pair{"Abort", ".abort"},
+		pair{"Show Players", ".players"},
+	)
+	// b.push(game.ID, `Commands:
+	// .join: Join game
+	// .start: Start game
+	// .abort: Abort game
+	// .players: Show players`)
 }
 
 func (b *LineBot) OnAbort(game *Game, aborter *Player) {
@@ -452,18 +473,18 @@ func (b *LineBot) OnShowPlayers(game *Game, players []*Player, leaderIndex int, 
 }
 
 func (b *LineBot) OnStartPick(game *Game, leader *Player) {
-	playersMap := make(map[string]string)
+	var buttons []pair
 	for _, player := range game.Players {
 		if leader.ID == player.ID {
-			playersMap[player.Name+" (leader)"] = ".pick:" + player.ID
+			buttons = append(buttons, pair{player.Name + " (leader)", ".pick:" + player.ID})
 		} else {
-			playersMap[player.Name] = ".pick:" + player.ID
+			buttons = append(buttons, pair{player.Name, ".pick:" + player.ID})
 		}
 	}
-	playersMap["Done"] = ".donepick"
+	buttons = append(buttons, pair{"Done", ".donepick"})
 	// TODO: specify number of picks
 	// TODO: specify number of fails
-	b.pushPostback(game.ID, fmt.Sprintf("Mission #%d", game.Round), fmt.Sprintf("This mission needs %d people", 1), playersMap)
+	b.pushPostback(game.ID, fmt.Sprintf("Mission #%d", game.Round), fmt.Sprintf("This mission needs %d people", 1), buttons...)
 	b.push(game.ID, fmt.Sprintf("Only for %s: choose people you trust the most to go for the mission. This mission needs %d people. Choose them wisely.", leader.Name, 1))
 }
 
@@ -507,15 +528,61 @@ func (b *LineBot) OnDonePick(game *Game, leader *Player, err error) {
 		b.push(game.ID, err.Error())
 		return
 	}
-
-	b.push(game.ID, fmt.Sprintf("%s has done choosing mission members", leader.Name))
 }
 
-func (b *LineBot) OnStartVoting(*Game, *Player, []*Player) {}
+func (b *LineBot) OnStartVoting(game *Game, leader *Player, members []*Player) {
+	var buffer bytes.Buffer
+	buffer.WriteString(fmt.Sprintf("%s has chosen the following people:", leader.Name))
+	for _, player := range members {
+		if leader.ID == player.ID {
+			buffer.WriteString(fmt.Sprintf("\n- %s (leader)", player.Name))
+		} else {
+			buffer.WriteString(fmt.Sprintf("\n- %s", player.Name))
+		}
+	}
+	buffer.WriteString(fmt.Sprintf("\n\nYou have %d seconds to vote. If you don't vote, it will count as a NO.", conf.GameVotingTime))
+	b.push(game.ID, buffer.String())
 
-func (b *LineBot) OnVote(*Game, *Player, bool, error) {}
+	b.pushPostback(game.ID,
+		fmt.Sprintf("Mission #%d, Vote #%d", game.Round, game.VotingRound),
+		"Vote here",
+		pair{"OK", ".vote:" + game.ID + ":ok"},
+		pair{"NO", ".vote:" + game.ID + ":no"},
+	)
+}
 
-func (b *LineBot) OnVotingDone(*Game, map[string]bool, bool) {}
+func (b *LineBot) OnVote(game *Game, player *Player, ok bool, err error) {
+	if err != nil {
+		b.push(player.ID, err.Error())
+		return
+	}
+
+	var vote string
+	if ok {
+		vote = "OK"
+	} else {
+		vote = "NO"
+	}
+	b.push(player.ID, fmt.Sprintf("You vote %s. You can always change this before the time runs out.", vote))
+}
+
+func (b *LineBot) OnVotingDone(game *Game, votes map[string]bool, majority bool) {
+	var buffer bytes.Buffer
+	buffer.WriteString("Here are the voting result:")
+	for voter, vote := range votes {
+		if vote {
+			buffer.WriteString(fmt.Sprintf("\n- %s votes OK", voter))
+		} else {
+			buffer.WriteString(fmt.Sprintf("\n- %s votes NO", voter))
+		}
+	}
+	if majority {
+		buffer.WriteString("\n\nMajority is reached. Mission will be executed.")
+	} else {
+		buffer.WriteString("\n\nMajority is not reached.")
+	}
+	b.push(game.ID, buffer.String())
+}
 
 func (b *LineBot) OnStartMission(*Game, []*Player)       {}
 func (b *LineBot) OnExecuteMission(*Game, *Player, bool) {}
