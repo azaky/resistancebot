@@ -12,7 +12,7 @@ import (
 	"github.com/patrickmn/go-cache"
 )
 
-type messageHandler func(*linebot.Event, ...string)
+type messageHandler func(linebot.Event, ...string)
 
 type LineBot struct {
 	client           *linebot.Client
@@ -58,7 +58,7 @@ func (b *LineBot) log(format string, args ...interface{}) {
 	log.Printf("[LINE] "+format, args...)
 }
 
-func (b *LineBot) reply(event *linebot.Event, messages ...string) error {
+func (b *LineBot) reply(event linebot.Event, messages ...string) error {
 	var lineMessages []linebot.Message
 	for _, message := range messages {
 		lineMessages = append(lineMessages, linebot.NewTextMessage(message))
@@ -70,7 +70,7 @@ func (b *LineBot) reply(event *linebot.Event, messages ...string) error {
 	return err
 }
 
-func (b *LineBot) replyPostback(event *linebot.Event, title, text string, data map[string]string) error {
+func (b *LineBot) replyPostback(event linebot.Event, title, text string, data map[string]string) error {
 	var actions []linebot.TemplateAction
 	for key, value := range data {
 		actions = append(actions, linebot.NewPostbackTemplateAction(key, value, ""))
@@ -83,7 +83,7 @@ func (b *LineBot) replyPostback(event *linebot.Event, title, text string, data m
 	return err
 }
 
-func (b *LineBot) replyRaw(event *linebot.Event, lineMessages ...linebot.Message) error {
+func (b *LineBot) replyRaw(event linebot.Event, lineMessages ...linebot.Message) error {
 	_, err := b.client.ReplyMessage(event.ReplyToken, lineMessages...).Do()
 	if err != nil {
 		b.log("Error replying to %+v: %s", event.Source, err.Error())
@@ -116,7 +116,7 @@ func (b *LineBot) pushPostback(to string, title, text string, data map[string]st
 	return err
 }
 
-func (b *LineBot) warnIncompatibility(event *linebot.Event) error {
+func (b *LineBot) warnIncompatibility(event linebot.Event) error {
 	return b.reply(event, "Please add me and upgrade line to v7.5.0")
 }
 
@@ -183,19 +183,19 @@ func (b *LineBot) EventHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (b *LineBot) handleJoin(event *linebot.Event) {
+func (b *LineBot) handleJoin(event linebot.Event) {
 	b.reply(event, `Thanks for adding me! Type ".create" to start a new game.`)
 }
 
-func (b *LineBot) handleFollow(event *linebot.Event) {
+func (b *LineBot) handleFollow(event linebot.Event) {
 	b.reply(event, `Thanks for adding me! Invite me to group chats to play.`)
 }
 
-func (b *LineBot) handleUnfollow(event *linebot.Event) {
+func (b *LineBot) handleUnfollow(event linebot.Event) {
 	// do some cleanup perhaps (?)
 }
 
-func (b *LineBot) handleTextMessage(event *linebot.Event, message *linebot.TextMessage) {
+func (b *LineBot) handleTextMessage(event linebot.Event, message *linebot.TextMessage) {
 	b.log("[MESSAGE] %+v: %s", event.Source, message.Text)
 	for regex, handler := range b.textPatterns {
 		matches := regex.FindStringSubmatch(message.Text)
@@ -206,7 +206,7 @@ func (b *LineBot) handleTextMessage(event *linebot.Event, message *linebot.TextM
 	}
 }
 
-func (b *LineBot) handlePostback(event *linebot.Event, postback *linebot.Postback) {
+func (b *LineBot) handlePostback(event linebot.Event, postback *linebot.Postback) {
 	for regex, handler := range b.textPatterns {
 		matches := regex.FindStringSubmatch(postback.Data)
 		if matches != nil {
@@ -216,7 +216,7 @@ func (b *LineBot) handlePostback(event *linebot.Event, postback *linebot.Postbac
 	}
 }
 
-func (b *LineBot) echo(event *linebot.Event, args ...string) {
+func (b *LineBot) echo(event linebot.Event, args ...string) {
 	b.reply(event, args[1])
 }
 
@@ -227,7 +227,7 @@ func (b *LineBot) getPlayerFromUser(user *linebot.UserProfileResponse) *Player {
 	}
 }
 
-func (b *LineBot) createGame(event *linebot.Event, args ...string) {
+func (b *LineBot) createGame(event linebot.Event, args ...string) {
 	if event.Source.Type == linebot.EventSourceTypeUser {
 		b.reply(event, "Cannot create game here. Create one in group/multichat.")
 		return
@@ -250,7 +250,7 @@ func (b *LineBot) createGame(event *linebot.Event, args ...string) {
 	game.AddPlayer(b.getPlayerFromUser(user))
 }
 
-func (b *LineBot) joinGame(event *linebot.Event, args ...string) {
+func (b *LineBot) joinGame(event linebot.Event, args ...string) {
 	if event.Source.Type == linebot.EventSourceTypeUser {
 		// don't bother reply
 		return
@@ -276,7 +276,7 @@ func (b *LineBot) joinGame(event *linebot.Event, args ...string) {
 	game.AddPlayer(b.getPlayerFromUser(user))
 }
 
-func (b *LineBot) startGame(event *linebot.Event, args ...string) {
+func (b *LineBot) startGame(event linebot.Event, args ...string) {
 	if event.Source.Type == linebot.EventSourceTypeUser {
 		// don't bother reply
 		return
