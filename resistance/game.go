@@ -277,6 +277,8 @@ start:
 		return
 	}
 	game.Round = 1
+	// give a moment for OnStart to fire up
+	time.Sleep(3 * time.Second)
 
 pick:
 	game.State = STATE_PICK
@@ -445,7 +447,7 @@ func (game *Game) abort(aborter string) error {
 }
 
 func (game *Game) Start(starter string) error {
-	if game.State == STATE_INITIALIZED {
+	if game.State != STATE_INITIALIZED {
 		return fmt.Errorf("Game already started")
 	}
 	game.cStartData <- starter

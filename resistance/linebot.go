@@ -36,6 +36,8 @@ func NewLineBot(client *linebot.Client) *LineBot {
 	b.registerPostbackPattern(`^\s*\.join\s*$`, b.joinGame)
 	b.registerTextPattern(`^\s*\.players?\s*$`, b.showPlayers)
 	b.registerTextPattern(`^\s*\.start\s*$`, b.startGame)
+	b.registerPostbackPattern(`^\s*\.pick:(\S+)\s*$`, b.pick)
+	b.registerPostbackPattern(`^\s*\.donepick\s*$`, b.donepick)
 	return b
 }
 
@@ -223,7 +225,8 @@ func (b *LineBot) handleTextMessage(event *linebot.Event, message *linebot.TextM
 }
 
 func (b *LineBot) handlePostback(event *linebot.Event, postback *linebot.Postback) {
-	for regex, handler := range b.textPatterns {
+	b.log("[POSTBACK] %+v: %s", event.Source, postback.Data)
+	for regex, handler := range b.postbackPatterns {
 		matches := regex.FindStringSubmatch(postback.Data)
 		if matches != nil {
 			handler(event, matches...)
@@ -353,10 +356,33 @@ func (b *LineBot) showPlayers(event *linebot.Event, args ...string) {
 	game.ShowPlayers()
 }
 
+func (b *LineBot) pick(event *linebot.Event, args ...string) {
+	id := util.GetGameID(event.Source)
+
+	if !GameExistsByID(id) {
+		return
+	}
+
+	game := LoadGame(id)
+	game.Pick(event.Source.UserID, args[1])
+}
+
+func (b *LineBot) donepick(event *linebot.Event, args ...string) {
+	id := util.GetGameID(event.Source)
+
+	if !GameExistsByID(id) {
+		return
+	}
+
+	game := LoadGame(id)
+	game.DonePick(event.Source.UserID)
+}
+
 func (b *LineBot) OnCreate(game *Game) {
 	// Create a postback button to join
 	b.pushTextback(game.ID, "New Game", "Click here to join", map[string]string{
-		"Join": ".join",
+		"Join":  ".join",
+		"Start": ".start",
 	})
 	b.push(game.ID, `Commands:
 .join: Join game
@@ -376,10 +402,21 @@ func (b *LineBot) OnAbort(game *Game, aborter *Player) {
 func (b *LineBot) OnStart(game *Game, starter *Player, err error) {
 	if err != nil {
 		b.push(game.ID, err.Error())
-	} else if starter == nil {
-		b.push(game.ID, `Game started.`)
+		return
+	}
+
+	if starter == nil {
+		b.push(game.ID, `Game started. Check your PM to find out your role.`)
 	} else {
-		b.push(game.ID, fmt.Sprintf(`Game started by %s.`, starter.Name))
+		b.push(game.ID, fmt.Sprintf(`Game started by %s. Check your PM to find out your role.`, starter.Name))
+	}
+
+	for _, player := range game.Players {
+		if player.Role == ROLE_RESISTANCE {
+			b.push(player.ID, fmt.Sprintf("%s, you are a Resistance", player.Name))
+		} else {
+			b.push(player.ID, fmt.Sprintf("%s, you are a Spy", player.Name))
+		}
 	}
 }
 
@@ -414,15 +451,74 @@ func (b *LineBot) OnShowPlayers(game *Game, players []*Player, leaderIndex int, 
 	b.push(game.ID, buffer.String())
 }
 
-func (b *LineBot) OnStartPick(*Game, *Player)                {}
-func (b *LineBot) OnPick(*Game, *Player, *Player, error)     {}
-func (b *LineBot) OnUnpick(*Game, *Player, *Player, error)   {}
-func (b *LineBot) OnDonePick(*Game, *Player, error)          {}
-func (b *LineBot) OnStartVoting(*Game, *Player, []*Player)   {}
-func (b *LineBot) OnVote(*Game, *Player, bool, error)        {}
+func (b *LineBot) OnStartPick(game *Game, leader *Player) {
+	playersMap := make(map[string]string)
+	for _, player := range game.Players {
+		if leader.ID == player.ID {
+			playersMap[player.Name+" (leader)"] = ".pick:" + player.ID
+		} else {
+			playersMap[player.Name] = ".pick:" + player.ID
+		}
+	}
+	playersMap["Done"] = ".donepick"
+	// TODO: specify number of picks
+	// TODO: specify number of fails
+	b.pushPostback(game.ID, fmt.Sprintf("Mission #%d", game.Round), fmt.Sprintf("This mission needs %d people", 1), playersMap)
+	b.push(game.ID, fmt.Sprintf("Only for %s: choose people you trust the most to go for the mission. This mission needs %d people. Choose them wisely.", leader.Name, 1))
+}
+
+func (b *LineBot) OnPick(game *Game, leader *Player, picked *Player, err error) {
+	if err != nil {
+		b.push(game.ID, err.Error())
+		return
+	}
+
+	var buffer bytes.Buffer
+	// TODO: specify number of picks
+	// TODO: specify number of fails
+	buffer.WriteString(fmt.Sprintf("%s chooses %s.\n\nCurrent mission members (need %d people):", leader.Name, picked.Name, 1))
+	for _, player := range game.Picks {
+		buffer.WriteString(fmt.Sprintf("\n- %s", player.Name))
+	}
+	b.push(game.ID, buffer.String())
+}
+
+func (b *LineBot) OnUnpick(game *Game, leader *Player, unpicked *Player, err error) {
+	if err != nil {
+		b.push(game.ID, err.Error())
+		return
+	}
+
+	var buffer bytes.Buffer
+	// TODO: specify number of picks
+	// TODO: specify number of fails
+	buffer.WriteString(fmt.Sprintf("%s cancels %s.\n\nCurrent mission members (need %d people):", leader.Name, unpicked.Name, 1))
+	for _, player := range game.Picks {
+		buffer.WriteString(fmt.Sprintf("\n- %s", player.Name))
+	}
+	if len(game.Picks) == 0 {
+		buffer.WriteString(fmt.Sprintf("\n(no members yet)"))
+	}
+	b.push(game.ID, buffer.String())
+}
+
+func (b *LineBot) OnDonePick(game *Game, leader *Player, err error) {
+	if err != nil {
+		b.push(game.ID, err.Error())
+		return
+	}
+
+	b.push(game.ID, fmt.Sprintf("%s has done choosing mission members", leader.Name))
+}
+
+func (b *LineBot) OnStartVoting(*Game, *Player, []*Player) {}
+
+func (b *LineBot) OnVote(*Game, *Player, bool, error) {}
+
 func (b *LineBot) OnVotingDone(*Game, map[string]bool, bool) {}
-func (b *LineBot) OnStartMission(*Game, []*Player)           {}
-func (b *LineBot) OnExecuteMission(*Game, *Player, bool)     {}
-func (b *LineBot) OnMissionDone(*Game, *Mission)             {}
-func (b *LineBot) OnSpyWin(*Game, string)                    {}
-func (b *LineBot) OnResistanceWin(*Game, string)             {}
+
+func (b *LineBot) OnStartMission(*Game, []*Player)       {}
+func (b *LineBot) OnExecuteMission(*Game, *Player, bool) {}
+func (b *LineBot) OnMissionDone(*Game, *Mission)         {}
+func (b *LineBot) OnSpyWin(*Game, string)                {}
+func (b *LineBot) OnResistanceWin(*Game, string)         {}
