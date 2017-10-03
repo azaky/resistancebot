@@ -241,7 +241,7 @@ func (b *LineBot) createGame(event linebot.Event, args ...string) {
 
 	id := util.GetGameID(event.Source)
 
-	if !GameExistsByID(id) {
+	if GameExistsByID(id) {
 		b.reply(event, "A game is already created.")
 		return
 	}
