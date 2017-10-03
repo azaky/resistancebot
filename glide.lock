@@ -1,4 +1,17 @@
-hash: ef835787a04e8ced53bef6961afc5f00f3af4e96d10caabf146ad3625748bd81
-updated: 2017-10-02T14:33:46.087642597+07:00
-imports: []
+hash: 2468536fb55dc4d421ff8e480c90f1e26d209741e34ca49328f442395c7f0e77
+updated: 2017-10-03T19:50:35.89231126+07:00
+imports:
+- name: github.com/kelseyhightower/envconfig
+  version: f611eb38b3875cc3bd991ca91c51d06446afa14c
+- name: github.com/line/line-bot-sdk-go
+  version: 3a7d66f5efce6ac202f650134609f9d6d163a640
+  subpackages:
+  - linebot
+- name: github.com/patrickmn/go-cache
+  version: 1881a9bccb818787f68c52bfba648c6cf34c34fa
+- name: golang.org/x/net
+  version: f2499483f923065a842d38eb4c7f1927e6fc6e6d
+  subpackages:
+  - context
+  - context/ctxhttp
 testImports: []
