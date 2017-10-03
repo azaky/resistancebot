@@ -7,7 +7,9 @@ import (
 )
 
 type Config struct {
-	Port                   string `envconfig:"port"`
+	Port                   string `envconfig:"port" default:"8000"`
+	LineChannelSecret      string `envconfig:"line_channel_secret"`
+	LineChannelToken       string `envconfig:"line_channel_token"`
 	GameMinPlayers         int    `envconfig:"game_min_players" default:"5"`
 	GameMaxPlayers         int    `envconfig:"game_max_players" default:"10"`
 	GameInitializationTime int    `envconfig:"game_initialization_time" default:"180"`

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/azaky/resistancebot/config"
@@ -114,7 +115,8 @@ type Game struct {
 	Votes       map[string]bool
 	LeaderIndex int
 	Missions    []*Mission
-	r           *rand.Rand
+
+	r *rand.Rand
 
 	cAddPlayer          chan error
 	cAddPlayerData      chan *Player
@@ -133,6 +135,7 @@ type Game struct {
 }
 
 type EventHandler interface {
+	OnCreate(*Game)
 	OnAbort(*Game)
 	OnStart(*Game, *Player, error)
 	OnAddPlayer(*Game, *Player, error)
@@ -151,10 +154,14 @@ type EventHandler interface {
 }
 
 var games map[string]*Game = make(map[string]*Game)
+var lock *sync.RWMutex = &sync.RWMutex{}
 var conf config.Config = config.Get()
 
-func NewGame(id string) *Game {
-	if game, ok := games[id]; ok {
+func NewGame(id string, eventHandler EventHandler) *Game {
+	lock.Lock()
+	defer lock.Unlock()
+
+	if game, exists := games[id]; exists {
 		return game
 	}
 	game := &Game{
@@ -179,14 +186,43 @@ func NewGame(id string) *Game {
 		cVoteData:           make(chan voteData),
 		cExecuteMission:     make(chan error),
 		cExecuteMissionData: make(chan executeMissionData),
+		EventHandler:        eventHandler,
+		r:                   rand.New(rand.NewSource(time.Now().Unix())),
 	}
 	games[id] = game
 	go game.daemon()
 	return game
 }
 
+func GameExistsByID(id string) bool {
+	lock.RLock()
+	defer lock.RUnlock()
+
+	_, exists := games[id]
+	return exists
+}
+
+func LoadGame(id string) *Game {
+	lock.RLock()
+	defer lock.RUnlock()
+
+	if game, exists := games[id]; exists {
+		return game
+	}
+	return nil
+}
+
+func DeleteGame(id string) bool {
+	lock.RLock()
+	defer lock.RUnlock()
+
+	_, exists := games[id]
+	delete(games, id)
+	return exists
+}
+
 func (game *Game) daemon() {
-	game.r = rand.New(rand.NewSource(time.Now().Unix()))
+	game.OnCreate(game)
 
 	// init:
 	var startError error
