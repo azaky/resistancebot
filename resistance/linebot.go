@@ -1,6 +1,7 @@
 package resistance
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"net/http"
@@ -28,12 +29,13 @@ func NewLineBot(client *linebot.Client) *LineBot {
 		postbackPatterns: make(map[*regexp.Regexp]messageHandler),
 		usersCache:       cache.New(30*time.Minute, 60*time.Minute),
 	}
-	b.registerTextPattern(`^\s*.echo\s*(.*)$`, b.echo)
-	b.registerTextPattern(`^\s*.create\s*$`, b.createGame)
-	b.registerTextPattern(`^\s*.abort\s*$`, b.abortGame)
-	b.registerTextPattern(`^\s*.join\s*$`, b.joinGame)
-	b.registerPostbackPattern(`^\s*.join\s*$`, b.joinGame)
-	b.registerTextPattern(`^\s*.start\s*$`, b.startGame)
+	b.registerTextPattern(`^\s*\.echo\s*(.*)$`, b.echo)
+	b.registerTextPattern(`^\s*\.create\s*$`, b.createGame)
+	b.registerTextPattern(`^\s*\.abort\s*$`, b.abortGame)
+	b.registerTextPattern(`^\s*\.join\s*$`, b.joinGame)
+	b.registerPostbackPattern(`^\s*\.join\s*$`, b.joinGame)
+	b.registerTextPattern(`^\s*\.players?\s*$`, b.showPlayers)
+	b.registerTextPattern(`^\s*\.start\s*$`, b.startGame)
 	return b
 }
 
@@ -108,6 +110,19 @@ func (b *LineBot) pushPostback(to string, title, text string, data map[string]st
 	var actions []linebot.TemplateAction
 	for key, value := range data {
 		actions = append(actions, linebot.NewPostbackTemplateAction(key, value, ""))
+	}
+	message := linebot.NewTemplateMessage(title, linebot.NewButtonsTemplate("", title, text, actions...))
+	_, err := b.client.PushMessage(to, message).Do()
+	if err != nil {
+		b.log("Error pushing postback to %+v: %s", to, err.Error())
+	}
+	return err
+}
+
+func (b *LineBot) pushTextback(to string, title, text string, data map[string]string) error {
+	var actions []linebot.TemplateAction
+	for key, value := range data {
+		actions = append(actions, linebot.NewPostbackTemplateAction(key, "?", value))
 	}
 	message := linebot.NewTemplateMessage(title, linebot.NewButtonsTemplate("", title, text, actions...))
 	_, err := b.client.PushMessage(to, message).Do()
@@ -322,15 +337,40 @@ func (b *LineBot) abortGame(event *linebot.Event, args ...string) {
 	game.Abort(user.UserID)
 }
 
+func (b *LineBot) showPlayers(event *linebot.Event, args ...string) {
+	if event.Source.Type == linebot.EventSourceTypeUser {
+		// don't bother reply
+		return
+	}
+
+	id := util.GetGameID(event.Source)
+
+	if !GameExistsByID(id) {
+		return
+	}
+
+	game := LoadGame(id)
+	game.ShowPlayers()
+}
+
 func (b *LineBot) OnCreate(game *Game) {
 	// Create a postback button to join
-	b.pushPostback(game.ID, "New Game", `Click here or type ".join" to join the game`, map[string]string{
+	b.pushTextback(game.ID, "New Game", "Click here to join", map[string]string{
 		"Join": ".join",
 	})
+	b.push(game.ID, `Commands:
+.join: Join game
+.start: Start game
+.abort: Abort game
+.players: Show players`)
 }
 
 func (b *LineBot) OnAbort(game *Game, aborter *Player) {
-	b.push(game.ID, fmt.Sprintf("Game aborted by %s.", aborter.Name))
+	if aborter != nil {
+		b.push(game.ID, fmt.Sprintf("Game aborted by %s.", aborter.Name))
+	} else {
+		b.push(game.ID, "Game aborted.")
+	}
 }
 
 func (b *LineBot) OnStart(game *Game, starter *Player, err error) {
@@ -349,6 +389,29 @@ func (b *LineBot) OnAddPlayer(game *Game, player *Player, err error) {
 	} else {
 		b.push(game.ID, fmt.Sprintf("%s is added to the game.", player.Name))
 	}
+}
+
+func (b *LineBot) OnShowPlayers(game *Game, players []*Player, leaderIndex int, over bool) {
+	var buffer bytes.Buffer
+	buffer.WriteString("Players:")
+	if !over {
+		for i, player := range players {
+			if i == leaderIndex {
+				buffer.WriteString(fmt.Sprintf("\n- %s (leader)", player.Name))
+			} else {
+				buffer.WriteString(fmt.Sprintf("\n- %s", player.Name))
+			}
+		}
+	} else {
+		for _, player := range players {
+			if player.Role == ROLE_RESISTANCE {
+				buffer.WriteString(fmt.Sprintf("\n- %s (Resistance)", player.Name))
+			} else {
+				buffer.WriteString(fmt.Sprintf("\n- %s (Spy)", player.Name))
+			}
+		}
+	}
+	b.push(game.ID, buffer.String())
 }
 
 func (b *LineBot) OnStartPick(*Game, *Player)                {}

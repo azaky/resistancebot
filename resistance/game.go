@@ -132,6 +132,8 @@ type Game struct {
 	cVoteData           chan voteData
 	cExecuteMission     chan error
 	cExecuteMissionData chan executeMissionData
+	cShowPlayers        chan interface{}
+	cShowPlayersData    chan interface{}
 
 	EventHandler
 }
@@ -153,6 +155,7 @@ type EventHandler interface {
 	OnMissionDone(*Game, *Mission)
 	OnSpyWin(*Game, string)
 	OnResistanceWin(*Game, string)
+	OnShowPlayers(*Game, []*Player, int, bool)
 }
 
 var games map[string]*Game = make(map[string]*Game)
@@ -190,6 +193,8 @@ func NewGame(id string, eventHandler EventHandler) *Game {
 		cVoteData:           make(chan voteData),
 		cExecuteMission:     make(chan error),
 		cExecuteMissionData: make(chan executeMissionData),
+		cShowPlayers:        make(chan interface{}),
+		cShowPlayersData:    make(chan interface{}),
 		EventHandler:        eventHandler,
 		r:                   rand.New(rand.NewSource(time.Now().Unix())),
 	}
@@ -257,6 +262,11 @@ func (game *Game) daemon() {
 			log.Println("c:abort")
 			game.abort(aborter)
 			return
+
+		case <-game.cShowPlayersData:
+			log.Println("c:showPlayers")
+			game.showPlayers()
+			game.cShowPlayers <- nil
 		}
 	}
 
@@ -289,6 +299,11 @@ pick:
 			if errDonePick == nil {
 				goto voting
 			}
+
+		case aborter := <-game.cAbortData:
+			log.Println("c:abort")
+			game.abort(aborter)
+			return
 		}
 	}
 
@@ -305,6 +320,11 @@ voting:
 
 		case <-votingTimer.C:
 			goto voting_done
+
+		case aborter := <-game.cAbortData:
+			log.Println("c:abort")
+			game.abort(aborter)
+			return
 		}
 	}
 
@@ -333,6 +353,11 @@ mission:
 
 		case <-missionTimer.C:
 			goto mission_done
+
+		case aborter := <-game.cAbortData:
+			log.Println("c:abort")
+			game.abort(aborter)
+			return
 		}
 	}
 
@@ -391,6 +416,17 @@ func (game *Game) addPlayer(newPlayer *Player) error {
 	game.Players = append(game.Players, newPlayer)
 	go game.OnAddPlayer(game, newPlayer, nil)
 	return nil
+}
+
+func (game *Game) ShowPlayers() {
+	game.cShowPlayersData <- nil
+	<-game.cShowPlayers
+	return
+}
+
+func (game *Game) showPlayers() {
+	go game.OnShowPlayers(game, game.Players, game.LeaderIndex, game.Over())
+	return
 }
 
 func (game *Game) Abort(aborter string) error {
@@ -649,4 +685,8 @@ func (game *Game) ResistanceWin() bool {
 	}
 	fail += game.NRound - len(game.Missions)
 	return success > fail
+}
+
+func (game *Game) Over() bool {
+	return game.SpyWin() || game.ResistanceWin()
 }
