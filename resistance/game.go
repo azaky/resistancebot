@@ -756,6 +756,9 @@ func (game *Game) executeMission(data executeMissionData) error {
 }
 
 func (game *Game) SpyWin() bool {
+	if game.Config == nil {
+		return false
+	}
 	success := 0
 	fail := 0
 	for _, mission := range game.Missions {
@@ -770,6 +773,9 @@ func (game *Game) SpyWin() bool {
 }
 
 func (game *Game) ResistanceWin() bool {
+	if game.Config == nil {
+		return false
+	}
 	success := 0
 	fail := 0
 	for _, mission := range game.Missions {
