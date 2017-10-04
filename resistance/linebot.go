@@ -41,6 +41,8 @@ func NewLineBot(client *linebot.Client) *LineBot {
 	b.registerTextPattern(`^\s*\.players?\s*$`, b.showPlayers)
 	b.registerTextPattern(`^\s*\.start\s*$`, b.startGame)
 	b.registerTextPattern(`^\s*\.info\s*$`, b.gameInfo)
+	b.registerTextPattern(`^\s*\.help\s*$`, b.showHelp)
+	b.registerTextPattern(`^\s*\.howtoplay\s*$`, b.showHowToPlay)
 	b.registerPostbackPattern(`^\.join$`, b.joinGame)
 	b.registerPostbackPattern(`^\.pick:(\S+):(\S+)$`, b.pick)
 	b.registerPostbackPattern(`^\.donepick:(\S+)$`, b.donepick)
@@ -293,6 +295,43 @@ func (b *LineBot) handlePostback(event *linebot.Event, postback *linebot.Postbac
 
 func (b *LineBot) echo(event *linebot.Event, args ...string) {
 	b.reply(event, args[1])
+}
+
+func (b *LineBot) showHelp(event *linebot.Event, args ...string) {
+	var buffer bytes.Buffer
+	buffer.WriteString("List of commands:")
+	buffer.WriteString("\n")
+	buffer.WriteString("\nGlobal:")
+	buffer.WriteString("\n.create : Create a new game")
+	buffer.WriteString("\n.join : Join a game")
+	buffer.WriteString("\n.help : Show this help")
+	buffer.WriteString("\n.howtoplay : Show rules of the game")
+	buffer.WriteString("\n")
+	buffer.WriteString("\nIn Game:")
+	buffer.WriteString("\n.players : List players")
+	buffer.WriteString("\n.info : Show useful info about the game (current stages, etc)")
+	buffer.WriteString("\n.abort : Abort the game")
+
+	b.reply(event, buffer.String())
+}
+
+func (b *LineBot) showHowToPlay(event *linebot.Event, args ...string) {
+	var buffer bytes.Buffer
+	buffer.WriteString("How to Play")
+	buffer.WriteString("\n")
+	buffer.WriteString("\nObjective:")
+	buffer.WriteString("\nThere are 5 missions. Resistance members win if 3 of them succeed, spies win if 3 of them fail")
+	buffer.WriteString("\n")
+	buffer.WriteString("\nStage 1:")
+	buffer.WriteString("\nLeader chooses mission team. The number varies on the number of players and the mission.")
+	buffer.WriteString("\n")
+	buffer.WriteString("\nStage 2:")
+	buffer.WriteString("\nAll vote for leader's choice. If majority of people agree, the mission will be executed. Otherwise, leaders is changed and back to stage 1.")
+	buffer.WriteString("\n")
+	buffer.WriteString("\nStage 3:")
+	buffer.WriteString("\nChosen team members go for the mission. Resistance must always succeed the mission, spy may fail/succeed it. Any fail results in a failure in the mission. Except for 4th mission when there are 7+ players, it takes 2 fails to sabotage the mission.")
+
+	b.reply(event, buffer.String())
 }
 
 func (b *LineBot) getPlayerFromUser(user *linebot.UserProfileResponse) *Player {
