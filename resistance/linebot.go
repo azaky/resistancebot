@@ -85,7 +85,11 @@ func (b *LineBot) reply(event *linebot.Event, messages ...string) error {
 func (b *LineBot) replyPostback(event *linebot.Event, title, text string, data ...pair) error {
 	var actions []linebot.TemplateAction
 	for _, p := range data {
-		actions = append(actions, linebot.NewPostbackTemplateAction(p.Key, p.Value, ""))
+		key := p.Key
+		if len(key) > 20 {
+			key = key[:20]
+		}
+		actions = append(actions, linebot.NewPostbackTemplateAction(key, p.Value, ""))
 	}
 	var messages []linebot.Message
 	// Send postback every 4 buttons
@@ -128,7 +132,11 @@ func (b *LineBot) push(to string, messages ...string) error {
 func (b *LineBot) pushPostback(to string, title, text string, data ...pair) error {
 	var actions []linebot.TemplateAction
 	for _, p := range data {
-		actions = append(actions, linebot.NewPostbackTemplateAction(p.Key, p.Value, ""))
+		key := p.Key
+		if len(key) > 20 {
+			key = key[:20]
+		}
+		actions = append(actions, linebot.NewPostbackTemplateAction(key, p.Value, ""))
 	}
 	var messages []linebot.Message
 	// Send postback every 4 buttons
@@ -151,7 +159,11 @@ func (b *LineBot) pushPostback(to string, title, text string, data ...pair) erro
 func (b *LineBot) pushTextback(to string, title, text string, data ...pair) error {
 	var actions []linebot.TemplateAction
 	for _, p := range data {
-		actions = append(actions, linebot.NewPostbackTemplateAction(p.Key, "?", p.Value))
+		key := p.Key
+		if len(key) > 20 {
+			key = key[:20]
+		}
+		actions = append(actions, linebot.NewPostbackTemplateAction(key, "?", p.Value))
 	}
 	var messages []linebot.Message
 	// Send postback every 4 buttons
@@ -542,7 +554,7 @@ func (b *LineBot) OnStartPick(game *Game, leader *Player) {
 	var buttons []pair
 	for _, player := range game.Players {
 		if leader.ID == player.ID {
-			buttons = append(buttons, pair{player.Name + " (leader)", ".pick:" + player.ID})
+			buttons = append(buttons, pair{"(*) " + player.Name, ".pick:" + player.ID})
 		} else {
 			buttons = append(buttons, pair{player.Name, ".pick:" + player.ID})
 		}
