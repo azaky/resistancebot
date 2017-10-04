@@ -454,9 +454,6 @@ func (b *LineBot) OnCreate(game *Game) {
 		pair{"Start", ".start"},
 		pair{"Abort", ".abort"},
 		pair{"Show Players", ".players"},
-		pair{"Dummy 1", ".dummy1"},
-		pair{"Dummy 2", ".dummy2"},
-		pair{"Dummy 3", ".dummy3"},
 	)
 	// b.push(game.ID, `Commands:
 	// .join: Join game
@@ -638,15 +635,20 @@ func (b *LineBot) OnVotingDone(game *Game, votes map[string]bool, majority bool)
 	buffer.WriteString("Here are the voting result:")
 	for voter, vote := range votes {
 		if vote {
-			buffer.WriteString(fmt.Sprintf("\n- %s votes OK", voter))
+			buffer.WriteString(fmt.Sprintf("\n- %s voted Approve", voter))
 		} else {
-			buffer.WriteString(fmt.Sprintf("\n- %s votes NO", voter))
+			buffer.WriteString(fmt.Sprintf("\n- %s voted Reject", voter))
 		}
+	}
+	if len(votes) == 0 {
+		buffer.WriteString("\n(no one votes)")
+	} else if len(votes) < game.NPlayers {
+		buffer.WriteString(fmt.Sprintf("\n(The rest %d people did not vote)", game.NPlayers-len(votes)))
 	}
 	if majority {
 		buffer.WriteString("\n\nMajority is reached. Mission will be executed.")
 	} else {
-		buffer.WriteString("\n\nMajority is not reached.")
+		buffer.WriteString("\n\nMajority is not reached. Moving on to the next leader.")
 	}
 	b.push(game.ID, buffer.String())
 }

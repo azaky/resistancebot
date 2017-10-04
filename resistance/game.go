@@ -113,12 +113,13 @@ type Config struct {
 }
 
 var gameConfigMap = map[int]*Config{
+	// For debug
 	1: {
 		NPlayers:  1,
 		NSpies:    1,
 		NMembers:  []int{1, 1, 1, 1, 1},
 		NFail:     []int{1, 1, 1, 1, 1},
-		NOverview: []string{"1", "1", "1", "1", "1"},
+		NOverview: []string{"1", "1", "1", "1*", "1"},
 		NRounds:   5,
 	},
 	5: {
@@ -141,32 +142,32 @@ var gameConfigMap = map[int]*Config{
 		NPlayers:  7,
 		NSpies:    3,
 		NMembers:  []int{2, 3, 3, 4, 4},
-		NFail:     []int{1, 1, 1, 1, 1},
-		NOverview: []string{"2", "3", "3", "4", "4"},
+		NFail:     []int{1, 1, 1, 2, 1},
+		NOverview: []string{"2", "3", "3", "4*", "4"},
 		NRounds:   5,
 	},
 	8: {
 		NPlayers:  8,
 		NSpies:    3,
 		NMembers:  []int{3, 4, 4, 5, 5},
-		NFail:     []int{1, 1, 1, 1, 1},
-		NOverview: []string{"3", "4", "4", "5", "5"},
+		NFail:     []int{1, 1, 1, 2, 1},
+		NOverview: []string{"3", "4", "4", "5*", "5"},
 		NRounds:   5,
 	},
 	9: {
 		NPlayers:  9,
 		NSpies:    3,
 		NMembers:  []int{3, 4, 4, 5, 5},
-		NFail:     []int{1, 1, 1, 1, 1},
-		NOverview: []string{"3", "4", "4", "5", "5"},
+		NFail:     []int{1, 1, 1, 2, 1},
+		NOverview: []string{"3", "4", "4", "5*", "5"},
 		NRounds:   5,
 	},
 	10: {
 		NPlayers:  10,
 		NSpies:    4,
 		NMembers:  []int{3, 4, 4, 5, 5},
-		NFail:     []int{1, 1, 1, 1, 1},
-		NOverview: []string{"3", "4", "4", "5", "5"},
+		NFail:     []int{1, 1, 1, 2, 1},
+		NOverview: []string{"3", "4", "4", "5*", "5"},
 		NRounds:   5,
 	},
 }
