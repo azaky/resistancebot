@@ -532,18 +532,18 @@ func (b *LineBot) OnShowPlayers(game *Game, players []*Player, leaderIndex int, 
 		buffer.WriteString("Players:")
 		for i, player := range players {
 			if i == leaderIndex {
-				buffer.WriteString(fmt.Sprintf("\n- %s (leader)", player.Name))
+				buffer.WriteString(fmt.Sprintf("\n%d. %s (leader)", i+1, player.Name))
 			} else {
-				buffer.WriteString(fmt.Sprintf("\n- %s", player.Name))
+				buffer.WriteString(fmt.Sprintf("\n%d. %s", i+1, player.Name))
 			}
 		}
 	} else {
 		buffer.WriteString("Here are players and their roles:")
-		for _, player := range players {
+		for i, player := range players {
 			if player.Role == ROLE_RESISTANCE {
-				buffer.WriteString(fmt.Sprintf("\n- %s (Resistance)", player.Name))
+				buffer.WriteString(fmt.Sprintf("\n%d. %s (Resistance)", i+1, player.Name))
 			} else {
-				buffer.WriteString(fmt.Sprintf("\n- %s (Spy)", player.Name))
+				buffer.WriteString(fmt.Sprintf("\n%d. %s (Spy)", i+1, player.Name))
 			}
 		}
 	}
@@ -560,12 +560,15 @@ func (b *LineBot) OnStartPick(game *Game, leader *Player) {
 		}
 	}
 	buttons = append(buttons, pair{"Done", ".donepick"})
-	b.pushPostback(game.ID,
+	b.pushPostback(leader.ID,
 		fmt.Sprintf("Mission #%d, Leader #%d", game.Round, game.VotingRound),
 		fmt.Sprintf("This mission needs %d people", game.Config.NMembers[game.Round-1]),
 		buttons...)
+	b.push(leader.ID,
+		fmt.Sprintf("You are the current leader. Choose people you trust the most to go for the mission. This mission needs %s people. Choose them wisely.",
+			leader.Name, game.Config.NOverview[game.Round-1]))
 	b.push(game.ID,
-		fmt.Sprintf("Only for %s: choose people you trust the most to go for the mission. This mission needs %s people. Choose them wisely.",
+		fmt.Sprintf("Current leader is %s. Choose people you trust the most to go for the mission. This mission needs %s people. Choose them wisely.",
 			leader.Name, game.Config.NOverview[game.Round-1]))
 }
 
@@ -577,8 +580,10 @@ func (b *LineBot) OnPick(game *Game, leader *Player, picked *Player, err error) 
 
 	var buffer bytes.Buffer
 	buffer.WriteString(fmt.Sprintf("%s chooses %s.\n\nCurrent mission members (need %s people):", leader.Name, picked.Name, game.Config.NOverview[game.Round-1]))
+	i := 1
 	for _, player := range game.Picks {
-		buffer.WriteString(fmt.Sprintf("\n- %s", player.Name))
+		buffer.WriteString(fmt.Sprintf("\n%d. %s", i, player.Name))
+		i++
 	}
 	b.push(game.ID, buffer.String())
 }
@@ -620,12 +625,15 @@ func (b *LineBot) OnStartVoting(game *Game, leader *Player, members []*Player) {
 	buffer.WriteString(fmt.Sprintf("\n\nYou have %d seconds to approve/reject the choice. If you don't vote, it will count as a Reject.", conf.GameVotingTime))
 	b.push(game.ID, buffer.String())
 
-	b.pushPostback(game.ID,
-		fmt.Sprintf("Mission #%d, Leader #%d", game.Round, game.VotingRound),
-		"Vote here",
-		pair{"Approve", ".vote:" + game.ID + ":ok"},
-		pair{"Reject", ".vote:" + game.ID + ":no"},
-	)
+	for _, player := range game.Players {
+		b.push(player.ID, buffer.String())
+		b.pushPostback(player.ID,
+			fmt.Sprintf("Mission #%d, Leader #%d", game.Round, game.VotingRound),
+			"Vote here",
+			pair{"Approve", ".vote:" + game.ID + ":ok"},
+			pair{"Reject", ".vote:" + game.ID + ":no"},
+		)
+	}
 }
 
 func (b *LineBot) OnVote(game *Game, player *Player, ok bool, err error) {
