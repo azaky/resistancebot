@@ -40,8 +40,9 @@ func NewLineBot(client *linebot.Client) *LineBot {
 	b.registerTextPattern(`^\s*\.join\s*$`, b.joinGame)
 	b.registerTextPattern(`^\s*\.players?\s*$`, b.showPlayers)
 	b.registerTextPattern(`^\s*\.start\s*$`, b.startGame)
+	b.registerTextPattern(`^\s*\.info\s*$`, b.gameInfo)
 	b.registerPostbackPattern(`^\.join$`, b.joinGame)
-	b.registerPostbackPattern(`^\.pick:(\S+)$`, b.pick)
+	b.registerPostbackPattern(`^\.pick:(\S+):(\S+)$`, b.pick)
 	b.registerPostbackPattern(`^\.donepick$`, b.donepick)
 	b.registerPostbackPattern(`^\.vote:(\S+):(\S+)$`, b.vote)
 	b.registerPostbackPattern(`^\.executemission:(\S+):(\S+)$`, b.executeMission)
@@ -367,6 +368,22 @@ func (b *LineBot) startGame(event *linebot.Event, args ...string) {
 	game.Start(user.UserID)
 }
 
+func (b *LineBot) gameInfo(event *linebot.Event, args ...string) {
+	if event.Source.Type == linebot.EventSourceTypeUser {
+		// don't bother reply
+		return
+	}
+
+	id := util.GetGameID(event.Source)
+
+	if !GameExistsByID(id) {
+		return
+	}
+
+	game := LoadGame(id)
+	game.Info()
+}
+
 func (b *LineBot) abortGame(event *linebot.Event, args ...string) {
 	if event.Source.Type == linebot.EventSourceTypeUser {
 		// don't bother reply
@@ -406,14 +423,14 @@ func (b *LineBot) showPlayers(event *linebot.Event, args ...string) {
 }
 
 func (b *LineBot) pick(event *linebot.Event, args ...string) {
-	id := util.GetGameID(event.Source)
+	id := args[1]
 
 	if !GameExistsByID(id) {
 		return
 	}
 
 	game := LoadGame(id)
-	game.Pick(event.Source.UserID, args[1])
+	game.Pick(event.Source.UserID, args[2])
 }
 
 func (b *LineBot) donepick(event *linebot.Event, args ...string) {
@@ -518,6 +535,22 @@ func (b *LineBot) OnStart(game *Game, starter *Player, c *Config, err error) {
 	}
 }
 
+func (b *LineBot) OnInfo(game *Game, c *Config) {
+	var buffer bytes.Buffer
+	buffer.WriteString(fmt.Sprintf("%d players, %d spies, %d resistances.", c.NPlayers, c.NSpies, c.NPlayers-c.NSpies))
+	var overview []string
+	for i, o := range c.NOverview {
+		if i == game.Round-1 {
+			overview = append(overview, "("+o+")")
+		} else {
+			overview = append(overview, o)
+		}
+	}
+	buffer.WriteString(fmt.Sprintf("\n\n%d missions, members required: %s", c.NRounds, strings.Join(overview, ", ")))
+
+	b.push(game.ID, buffer.String())
+}
+
 func (b *LineBot) OnAddPlayer(game *Game, player *Player, err error) {
 	if err != nil {
 		b.push(game.ID, err.Error())
@@ -554,9 +587,9 @@ func (b *LineBot) OnStartPick(game *Game, leader *Player) {
 	var buttons []pair
 	for _, player := range game.Players {
 		if leader.ID == player.ID {
-			buttons = append(buttons, pair{"(*) " + player.Name, ".pick:" + player.ID})
+			buttons = append(buttons, pair{"(*) " + player.Name, ".pick:" + game.ID + ":" + player.ID})
 		} else {
-			buttons = append(buttons, pair{player.Name, ".pick:" + player.ID})
+			buttons = append(buttons, pair{player.Name, ".pick:" + game.ID + ":" + player.ID})
 		}
 	}
 	buttons = append(buttons, pair{"Done", ".donepick"})
@@ -586,6 +619,7 @@ func (b *LineBot) OnPick(game *Game, leader *Player, picked *Player, err error) 
 		i++
 	}
 	b.push(game.ID, buffer.String())
+	b.push(leader.ID, buffer.String())
 }
 
 func (b *LineBot) OnUnpick(game *Game, leader *Player, unpicked *Player, err error) {
@@ -603,6 +637,7 @@ func (b *LineBot) OnUnpick(game *Game, leader *Player, unpicked *Player, err err
 		buffer.WriteString(fmt.Sprintf("\n(no members yet)"))
 	}
 	b.push(game.ID, buffer.String())
+	b.push(leader.ID, buffer.String())
 }
 
 func (b *LineBot) OnDonePick(game *Game, leader *Player, err error) {

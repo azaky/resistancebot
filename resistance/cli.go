@@ -16,6 +16,9 @@ func (h *cliHandler) OnAbort(game *Game, player *Player) {
 func (h *cliHandler) OnShowPlayers(game *Game, players []*Player, leaderIndex int, over bool) {
 	log.Printf("[OnShowPlayers]\n")
 }
+func (h *cliHandler) OnInfo(game *Game, config *Config) {
+	log.Printf("[OnInfo]\n")
+}
 func (h *cliHandler) OnStart(game *Game, starter *Player, config *Config, err error) {
 	if err != nil {
 		log.Printf("[OnStart] error: %v\n", err)

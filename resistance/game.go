@@ -205,6 +205,8 @@ type Game struct {
 	cExecuteMissionData chan executeMissionData
 	cShowPlayers        chan interface{}
 	cShowPlayersData    chan interface{}
+	cInfo               chan interface{}
+	cInfoData           chan interface{}
 
 	EventHandler
 }
@@ -227,6 +229,7 @@ type EventHandler interface {
 	OnSpyWin(*Game, string)
 	OnResistanceWin(*Game, string)
 	OnShowPlayers(*Game, []*Player, int, bool)
+	OnInfo(*Game, *Config)
 }
 
 var games map[string]*Game = make(map[string]*Game)
@@ -265,6 +268,8 @@ func NewGame(id string, eventHandler EventHandler) *Game {
 		cExecuteMissionData: make(chan executeMissionData),
 		cShowPlayers:        make(chan interface{}),
 		cShowPlayersData:    make(chan interface{}),
+		cInfo:               make(chan interface{}),
+		cInfoData:           make(chan interface{}),
 		EventHandler:        eventHandler,
 		r:                   rand.New(rand.NewSource(time.Now().Unix())),
 		spyWonByRejection:   false,
@@ -338,6 +343,11 @@ func (game *Game) daemon() {
 			log.Println("c:showPlayers")
 			game.showPlayers()
 			game.cShowPlayers <- nil
+
+		case <-game.cInfoData:
+			log.Println("c:info")
+			game.info()
+			game.cInfo <- nil
 		}
 	}
 
@@ -381,6 +391,11 @@ pick:
 			log.Println("c:showPlayers")
 			game.showPlayers()
 			game.cShowPlayers <- nil
+
+		case <-game.cInfoData:
+			log.Println("c:info")
+			game.info()
+			game.cInfo <- nil
 		}
 	}
 
@@ -408,6 +423,11 @@ voting:
 			log.Println("c:showPlayers")
 			game.showPlayers()
 			game.cShowPlayers <- nil
+
+		case <-game.cInfoData:
+			log.Println("c:info")
+			game.info()
+			game.cInfo <- nil
 		}
 	}
 
@@ -454,6 +474,11 @@ mission:
 			log.Println("c:showPlayers")
 			game.showPlayers()
 			game.cShowPlayers <- nil
+
+		case <-game.cInfoData:
+			log.Println("c:info")
+			game.info()
+			game.cInfo <- nil
 		}
 	}
 
@@ -522,6 +547,19 @@ func (game *Game) ShowPlayers() {
 
 func (game *Game) showPlayers() {
 	go game.OnShowPlayers(game, game.Players, game.LeaderIndex, game.Over())
+	return
+}
+
+func (game *Game) Info() {
+	game.cInfoData <- nil
+	<-game.cInfo
+	return
+}
+
+func (game *Game) info() {
+	if game.Config != nil {
+		go game.OnInfo(game, game.Config)
+	}
 	return
 }
 
