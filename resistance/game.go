@@ -231,6 +231,8 @@ type EventHandler interface {
 	OnShowPlayers(*Game, []*Player, int, bool)
 	OnInfo(*Game, *Config)
 	OnStartWarning(*Game, int)
+	OnVotingWarning(*Game, int)
+	OnMissionWarning(*Game, int)
 }
 
 var games map[string]*Game = make(map[string]*Game)
@@ -313,7 +315,6 @@ func (game *Game) daemon() {
 	// init:
 	var startError error
 	initTimer := time.NewTimer(time.Duration(conf.GameInitializationTime) * time.Second)
-	// warning timers
 	init30Timer := time.NewTimer(time.Duration(conf.GameInitializationTime-30) * time.Second)
 	init15Timer := time.NewTimer(time.Duration(conf.GameInitializationTime-15) * time.Second)
 
@@ -417,11 +418,15 @@ voting:
 	game.Votes = make(map[string]bool)
 	go game.OnStartVoting(game, game.leader(), game.GetPicks())
 	votingTimer := time.NewTimer(time.Duration(conf.GameVotingTime) * time.Second)
+	voting15Timer := time.NewTimer(time.Duration(conf.GameVotingTime-15) * time.Second)
 
 	for {
 		select {
 		case data := <-game.cVoteData:
 			game.cVote <- game.vote(data)
+
+		case <-voting15Timer.C:
+			go game.OnVotingWarning(game, 15)
 
 		case <-votingTimer.C:
 			goto voting_done
@@ -468,11 +473,15 @@ mission:
 	game.State = STATE_MISSION
 	game.startMission()
 	missionTimer := time.NewTimer(time.Duration(conf.GameMissionTime) * time.Second)
+	mission15Timer := time.NewTimer(time.Duration(conf.GameMissionTime-15) * time.Second)
 
 	for {
 		select {
 		case data := <-game.cExecuteMissionData:
 			game.cExecuteMission <- game.executeMission(data)
+
+		case <-mission15Timer.C:
+			go game.OnMissionWarning(game, 15)
 
 		case <-missionTimer.C:
 			goto mission_done
