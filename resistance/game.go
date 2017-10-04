@@ -118,7 +118,7 @@ var gameConfigMap = map[int]*Config{
 		NPlayers:  1,
 		NSpies:    1,
 		NMembers:  []int{1, 1, 1, 1, 1},
-		NFail:     []int{1, 1, 1, 1, 1},
+		NFail:     []int{1, 1, 1, 2, 1},
 		NOverview: []string{"1", "1", "1", "1*", "1"},
 		NRounds:   5,
 	},
@@ -183,8 +183,9 @@ type Game struct {
 	Votes       map[string]bool
 	LeaderIndex int
 	Missions    []*Mission
+	Config      *Config
 
-	Config *Config
+	spyWonByRejection bool
 
 	r *rand.Rand
 
@@ -266,6 +267,7 @@ func NewGame(id string, eventHandler EventHandler) *Game {
 		cShowPlayersData:    make(chan interface{}),
 		EventHandler:        eventHandler,
 		r:                   rand.New(rand.NewSource(time.Now().Unix())),
+		spyWonByRejection:   false,
 	}
 	games[id] = game
 	go game.daemon()
@@ -417,10 +419,13 @@ voting_done:
 		votes[game.FindPlayerByID(id).Name] = vote
 	}
 	go game.OnVotingDone(game, votes, majority)
+	time.Sleep(2 * time.Second)
 	if majority {
 		goto mission
 	} else if game.VotingRound == conf.GameVotingRound {
-		game.OnSpyWin(game, fmt.Sprintf("Concensus are not reached after %d times voting. Spy won!", conf.GameVotingRound))
+		// force spy win
+		game.spyWonByRejection = true
+		go game.OnSpyWin(game, fmt.Sprintf("Concensus are not reached after %d times voting. Spy won!", conf.GameVotingRound))
 		game.cleanup()
 		return
 	} else {
@@ -760,6 +765,9 @@ func (game *Game) SpyWin() bool {
 	if game.Config == nil {
 		return false
 	}
+	if game.spyWonByRejection {
+		return true
+	}
 	success := 0
 	fail := 0
 	for _, mission := range game.Missions {
@@ -775,6 +783,9 @@ func (game *Game) SpyWin() bool {
 
 func (game *Game) ResistanceWin() bool {
 	if game.Config == nil {
+		return false
+	}
+	if game.spyWonByRejection {
 		return false
 	}
 	success := 0

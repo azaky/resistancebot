@@ -516,8 +516,8 @@ func (b *LineBot) OnAddPlayer(game *Game, player *Player, err error) {
 
 func (b *LineBot) OnShowPlayers(game *Game, players []*Player, leaderIndex int, over bool) {
 	var buffer bytes.Buffer
-	buffer.WriteString("Players:")
 	if !over {
+		buffer.WriteString("Players:")
 		for i, player := range players {
 			if i == leaderIndex {
 				buffer.WriteString(fmt.Sprintf("\n- %s (leader)", player.Name))
@@ -526,6 +526,7 @@ func (b *LineBot) OnShowPlayers(game *Game, players []*Player, leaderIndex int, 
 			}
 		}
 	} else {
+		buffer.WriteString("Here are players and their roles:")
 		for _, player := range players {
 			if player.Role == ROLE_RESISTANCE {
 				buffer.WriteString(fmt.Sprintf("\n- %s (Resistance)", player.Name))
