@@ -419,11 +419,14 @@ func (b *LineBot) OnCreate(game *Game) {
 	// Create a postback button to join
 	b.pushTextback(game.ID,
 		"New Game",
-		"Commands:",
+		fmt.Sprintf("Game will be started in %d seconds. Commands:", conf.GameInitializationTime),
 		pair{"Join", ".join"},
 		pair{"Start", ".start"},
 		pair{"Abort", ".abort"},
 		pair{"Show Players", ".players"},
+		pair{"Dummy 1", ".dummy1"},
+		pair{"Dummy 2", ".dummy2"},
+		pair{"Dummy 3", ".dummy3"},
 	)
 	// b.push(game.ID, `Commands:
 	// .join: Join game
@@ -440,18 +443,26 @@ func (b *LineBot) OnAbort(game *Game, aborter *Player) {
 	}
 }
 
-func (b *LineBot) OnStart(game *Game, starter *Player, err error) {
+func (b *LineBot) OnStart(game *Game, starter *Player, c *Config, err error) {
 	if err != nil {
 		b.push(game.ID, err.Error())
 		return
 	}
 
+	var messages []string
 	if starter == nil {
-		b.push(game.ID, `Game started. Check your PM to find out your role.`)
+		messages = append(messages, `Game started. Check your PM to find out your role.`)
 	} else {
-		b.push(game.ID, fmt.Sprintf(`Game started by %s. Check your PM to find out your role.`, starter.Name))
+		messages = append(messages, fmt.Sprintf(`Game started by %s. Check your PM to find out your role.`, starter.Name))
 	}
-	// TODO: send out overview (#spies, #members each round, etc)
+
+	var buffer bytes.Buffer
+	buffer.WriteString(fmt.Sprintf("There are %d players, and %d among them are spies.", c.NPlayers, c.NSpies))
+	buffer.WriteString(fmt.Sprintf("\n\nThere are %d missions, and each mission requires %s members each", c.NRounds, strings.Join(c.NOverview, ", ")))
+	buffer.WriteString("\n\n(* means that the mission requires at least 2 fails to fail it)")
+	messages = append(messages, buffer.String())
+
+	b.push(game.ID, messages...)
 
 	for _, player := range game.Players {
 		if player.Role == ROLE_RESISTANCE {
@@ -511,8 +522,13 @@ func (b *LineBot) OnStartPick(game *Game, leader *Player) {
 	buttons = append(buttons, pair{"Done", ".donepick"})
 	// TODO: specify number of picks
 	// TODO: specify number of fails
-	b.pushPostback(game.ID, fmt.Sprintf("Mission #%d, Leader #%d", game.Round, game.VotingRound), fmt.Sprintf("This mission needs %d people", 1), buttons...)
-	b.push(game.ID, fmt.Sprintf("Only for %s: choose people you trust the most to go for the mission. This mission needs %d people. Choose them wisely.", leader.Name, 1))
+	b.pushPostback(game.ID,
+		fmt.Sprintf("Mission #%d, Leader #%d", game.Round, game.VotingRound),
+		fmt.Sprintf("This mission needs %d people", game.Config.NMembers[game.Round-1]),
+		buttons...)
+	b.push(game.ID,
+		fmt.Sprintf("Only for %s: choose people you trust the most to go for the mission. This mission needs %s people. Choose them wisely.",
+			leader.Name, game.Config.NOverview[game.Round-1]))
 }
 
 func (b *LineBot) OnPick(game *Game, leader *Player, picked *Player, err error) {

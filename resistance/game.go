@@ -103,18 +103,87 @@ type executeMissionData struct {
 	Success  bool
 }
 
+type Config struct {
+	NPlayers  int
+	NSpies    int
+	NMembers  []int
+	NFail     []int
+	NOverview []string
+	NRounds   int
+}
+
+var gameConfigMap = map[int]*Config{
+	1: {
+		NPlayers:  1,
+		NSpies:    1,
+		NMembers:  []int{1, 1, 1, 1, 1},
+		NFail:     []int{1, 1, 1, 1, 1},
+		NOverview: []string{"1", "1", "1", "1", "1"},
+		NRounds:   5,
+	},
+	5: {
+		NPlayers:  5,
+		NSpies:    2,
+		NMembers:  []int{2, 3, 2, 3, 3},
+		NFail:     []int{1, 1, 1, 1, 1},
+		NOverview: []string{"2", "3", "2", "3", "3"},
+		NRounds:   5,
+	},
+	6: {
+		NPlayers:  6,
+		NSpies:    2,
+		NMembers:  []int{2, 3, 4, 3, 4},
+		NFail:     []int{1, 1, 1, 1, 1},
+		NOverview: []string{"2", "3", "4", "3", "4"},
+		NRounds:   5,
+	},
+	7: {
+		NPlayers:  7,
+		NSpies:    3,
+		NMembers:  []int{2, 3, 3, 4, 4},
+		NFail:     []int{1, 1, 1, 1, 1},
+		NOverview: []string{"2", "3", "3", "4", "4"},
+		NRounds:   5,
+	},
+	8: {
+		NPlayers:  8,
+		NSpies:    3,
+		NMembers:  []int{3, 4, 4, 5, 5},
+		NFail:     []int{1, 1, 1, 1, 1},
+		NOverview: []string{"3", "4", "4", "5", "5"},
+		NRounds:   5,
+	},
+	9: {
+		NPlayers:  9,
+		NSpies:    3,
+		NMembers:  []int{3, 4, 4, 5, 5},
+		NFail:     []int{1, 1, 1, 1, 1},
+		NOverview: []string{"3", "4", "4", "5", "5"},
+		NRounds:   5,
+	},
+	10: {
+		NPlayers:  10,
+		NSpies:    4,
+		NMembers:  []int{3, 4, 4, 5, 5},
+		NFail:     []int{1, 1, 1, 1, 1},
+		NOverview: []string{"3", "4", "4", "5", "5"},
+		NRounds:   5,
+	},
+}
+
 type Game struct {
 	ID          string
 	Players     []*Player
 	NPlayers    int
 	State       State
 	Round       int
-	NRound      int
 	Picks       map[string]*Player
 	VotingRound int
 	Votes       map[string]bool
 	LeaderIndex int
 	Missions    []*Mission
+
+	Config *Config
 
 	r *rand.Rand
 
@@ -141,7 +210,7 @@ type Game struct {
 type EventHandler interface {
 	OnCreate(*Game)
 	OnAbort(*Game, *Player)
-	OnStart(*Game, *Player, error)
+	OnStart(*Game, *Player, *Config, error)
 	OnAddPlayer(*Game, *Player, error)
 	OnStartPick(*Game, *Player)
 	OnPick(*Game, *Player, *Player, error)
@@ -175,7 +244,6 @@ func NewGame(id string, eventHandler EventHandler) *Game {
 		NPlayers:            0,
 		State:               STATE_INITIALIZED,
 		Round:               0,
-		NRound:              5,
 		VotingRound:         0,
 		LeaderIndex:         -1,
 		Missions:            []*Mission{},
@@ -341,6 +409,7 @@ voting:
 	}
 
 voting_done:
+	time.Sleep(1 * time.Second)
 	majority := game.calculateVote()
 	votes := make(map[string]bool)
 	for id, vote := range game.Votes {
@@ -477,17 +546,20 @@ func (game *Game) start(starter string) error {
 	p := game.FindPlayerByID(starter)
 	if p == nil && starter != "timer" {
 		err := fmt.Errorf("Only players in the game can start the game")
-		go game.OnStart(game, nil, err)
+		go game.OnStart(game, nil, nil, err)
 		return err
 	}
-	if game.NPlayers < conf.GameMinPlayers || game.NPlayers > conf.GameMaxPlayers {
+	c, ok := gameConfigMap[game.NPlayers]
+	if !ok {
+		// if game.NPlayers < conf.GameMinPlayers || game.NPlayers > conf.GameMaxPlayers {
 		err := fmt.Errorf("Number of players should be between %d and %d", conf.GameMinPlayers, conf.GameMaxPlayers)
-		go game.OnStart(game, p, err)
+		go game.OnStart(game, p, nil, err)
 		return err
 	}
+	game.Config = c
 	game.randomizePlayers()
 	game.assignRoles()
-	go game.OnStart(game, p, nil)
+	go game.OnStart(game, p, c, nil)
 	return nil
 }
 
@@ -504,8 +576,7 @@ func (game *Game) assignRoles() {
 	for _, player := range game.Players {
 		player.Role = ROLE_RESISTANCE
 	}
-	// TODO: num of spies
-	numSpy := 1
+	numSpy := game.Config.NSpies
 	for numSpy > 0 {
 		x := game.r.Intn(game.NPlayers)
 		if game.Players[x].Role == ROLE_SPY {
@@ -543,7 +614,7 @@ func (game *Game) Pick(leader, picked string) error {
 func (game *Game) pick(data pickData) error {
 	if data.LeaderID != game.leader().ID {
 		// do not call OnPick error, just ignore it
-		return fmt.Errorf("You have no right to pick")
+		return fmt.Errorf("You have no right to choose")
 	}
 	if p, ok := game.Picks[data.PlayerID]; ok {
 		delete(game.Picks, data.PlayerID)
@@ -552,11 +623,10 @@ func (game *Game) pick(data pickData) error {
 	}
 	p := game.FindPlayerByID(data.PlayerID)
 	if p == nil {
-		err := fmt.Errorf("Cannot pick players who are not in the game")
+		err := fmt.Errorf("Cannot choose players who are not in the game")
 		go game.OnPick(game, game.leader(), nil, err)
 		return err
 	}
-	// TODO: num of picks
 	game.Picks[data.PlayerID] = p
 	go game.OnPick(game, game.leader(), p, nil)
 	return nil
@@ -575,7 +645,12 @@ func (game *Game) donePick(leader string) error {
 		// do not call OnDonePick errror, just ignore it
 		return fmt.Errorf("You have no right to finish picking")
 	}
-	// TODO: num of picks
+	npicks := game.Config.NMembers[game.Round-1]
+	if len(game.Picks) != npicks {
+		err := fmt.Errorf("You must choose exactly %d people", npicks)
+		go game.OnPick(game, game.leader(), nil, err)
+		return err
+	}
 	go game.OnDonePick(game, game.leader(), nil)
 	return nil
 }
@@ -595,7 +670,6 @@ func (game *Game) vote(data voteData) error {
 	p := game.FindPlayerByID(data.PlayerID)
 	if p == nil {
 		err := fmt.Errorf("You are not in the game")
-		// go game.OnVote(game, nil, data.Vote, err)
 		return err
 	}
 	game.Votes[data.PlayerID] = data.Vote
@@ -642,8 +716,7 @@ func (game *Game) startMission() {
 		Members: missionMembers,
 		Round:   game.Round,
 		Votes:   missionVotes,
-		// TODO
-		MinFail: 1,
+		MinFail: game.Config.NFail[game.Round-1],
 	}
 	game.Missions = append(game.Missions, newMission)
 	go game.OnStartMission(game, missionMembers)
@@ -692,7 +765,7 @@ func (game *Game) SpyWin() bool {
 			fail++
 		}
 	}
-	success += game.NRound - len(game.Missions)
+	success += game.Config.NRounds - len(game.Missions)
 	return fail > success
 }
 
@@ -706,7 +779,7 @@ func (game *Game) ResistanceWin() bool {
 			fail++
 		}
 	}
-	fail += game.NRound - len(game.Missions)
+	fail += game.Config.NRounds - len(game.Missions)
 	return success > fail
 }
 
