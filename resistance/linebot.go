@@ -260,11 +260,11 @@ func (b *LineBot) EventHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func (b *LineBot) handleJoin(event *linebot.Event) {
-	b.reply(event, `Thanks for adding me! Type ".create" to start a new game.`)
+	b.reply(event, `Thanks for adding me! Type ".create" to start a new game, and ".help" to show help`)
 }
 
 func (b *LineBot) handleFollow(event *linebot.Event) {
-	b.reply(event, `Thanks for adding me! Invite me to group chats to play.`)
+	b.reply(event, `Thanks for adding me! Invite me to group chats to play`)
 }
 
 func (b *LineBot) handleUnfollow(event *linebot.Event) {
@@ -302,15 +302,15 @@ func (b *LineBot) showHelp(event *linebot.Event, args ...string) {
 	buffer.WriteString("List of commands:")
 	buffer.WriteString("\n")
 	buffer.WriteString("\nGlobal:")
-	buffer.WriteString("\n.create : Create a new game")
-	buffer.WriteString("\n.join : Join a game")
-	buffer.WriteString("\n.help : Show this help")
+	buffer.WriteString("\n.help : Show this")
 	buffer.WriteString("\n.howtoplay : Show rules of the game")
 	buffer.WriteString("\n")
 	buffer.WriteString("\nIn Game:")
+	buffer.WriteString("\n.create : Create a new game")
+	buffer.WriteString("\n.join : Join a game")
 	buffer.WriteString("\n.players : List players")
-	buffer.WriteString("\n.info : Show useful info about the game (current stages, etc)")
 	buffer.WriteString("\n.abort : Abort the game")
+	buffer.WriteString("\n.info : Show useful info about the game (current stage, leader, etc)")
 
 	b.reply(event, buffer.String())
 }
@@ -326,10 +326,10 @@ func (b *LineBot) showHowToPlay(event *linebot.Event, args ...string) {
 	buffer.WriteString("\nLeader chooses mission team. The number varies on the number of players and the mission.")
 	buffer.WriteString("\n")
 	buffer.WriteString("\nStage 2:")
-	buffer.WriteString("\nAll vote for leader's choice. If majority of people agree, the mission will be executed. Otherwise, leaders is changed and back to stage 1.")
+	buffer.WriteString("\nAll votes for leader's choice. If majority of people agree, the mission will be executed. Otherwise, leaders is changed and back to stage 1.")
 	buffer.WriteString("\n")
 	buffer.WriteString("\nStage 3:")
-	buffer.WriteString("\nChosen team members go for the mission. Resistance must always succeed the mission, spy may fail/succeed it. Any fail results in a failure in the mission. Except for 4th mission when there are 7+ players, it takes 2 fails to sabotage the mission.")
+	buffer.WriteString("\nThe mission is executed by chosen team members. Resistance must always succeed the mission, spy may fail/succeed it. Any fail results in failure of the mission. Except for 4th mission when there are 7+ players, it takes 2 fails to sabotage the mission.")
 
 	b.reply(event, buffer.String())
 }
@@ -343,7 +343,7 @@ func (b *LineBot) getPlayerFromUser(user *linebot.UserProfileResponse) *Player {
 
 func (b *LineBot) createGame(event *linebot.Event, args ...string) {
 	if event.Source.Type == linebot.EventSourceTypeUser {
-		b.reply(event, "Cannot create game here. Create one in group/multichat.")
+		b.reply(event, "Cannot create game here. Create one in group/multichat")
 		return
 	}
 
@@ -356,7 +356,7 @@ func (b *LineBot) createGame(event *linebot.Event, args ...string) {
 	id := util.GetGameID(event.Source)
 
 	if GameExistsByID(id) {
-		b.reply(event, "A game is already created.")
+		b.reply(event, "A game is already created")
 		return
 	}
 
@@ -533,7 +533,7 @@ func (b *LineBot) OnCreate(game *Game) {
 
 func (b *LineBot) OnAbort(game *Game, aborter *Player) {
 	if aborter != nil {
-		b.push(game.ID, fmt.Sprintf("Game aborted by %s.", aborter.Name))
+		b.push(game.ID, fmt.Sprintf("Game aborted by %s", aborter.Name))
 	} else {
 		b.push(game.ID, "Game aborted.")
 	}
@@ -551,22 +551,21 @@ func (b *LineBot) OnStart(game *Game, starter *Player, c *Config, err error) {
 
 	var messages []string
 	if starter == nil {
-		messages = append(messages, `Game started. Check your PM to find out your role.`)
+		messages = append(messages, `Game started. Check your PM to find out your role`)
 	} else {
-		messages = append(messages, fmt.Sprintf(`Game started by %s. Check your PM to find out your role.`, starter.Name))
+		messages = append(messages, fmt.Sprintf(`Game started by %s. Check your PM to find out your role`, starter.Name))
 	}
 
 	var buffer bytes.Buffer
 	buffer.WriteString(fmt.Sprintf("There are %d players, and %d among them are spies.", c.NPlayers, c.NSpies))
-	buffer.WriteString(fmt.Sprintf("\n\nThere are %d missions, and each mission requires %s members each", c.NRounds, strings.Join(c.NOverview, ", ")))
-	buffer.WriteString("\n\n(* means that the mission requires at least 2 fails to fail it)")
+	buffer.WriteString(fmt.Sprintf("\n\nThere are %d missions to be executed, each requires %s members each (* means that the mission requires at least 2 fails to sabotage it)", c.NRounds, strings.Join(c.NOverview, ", ")))
 	messages = append(messages, buffer.String())
 
 	b.push(game.ID, messages...)
 
 	for _, player := range game.Players {
 		if player.Role == ROLE_RESISTANCE {
-			b.push(player.ID, fmt.Sprintf("%s, you are a Resistance", player.Name))
+			b.push(player.ID, fmt.Sprintf("%s, you are a Resistance. You'll win if at least 3 missions are successful.", player.Name))
 		} else {
 			var spies []string
 			for _, spy := range game.Players {
@@ -574,7 +573,7 @@ func (b *LineBot) OnStart(game *Game, starter *Player, c *Config, err error) {
 					spies = append(spies, spy.Name)
 				}
 			}
-			b.push(player.ID, fmt.Sprintf("%s, you are a Spy. Other spies are %s", player.Name, strings.Join(spies, ", ")))
+			b.push(player.ID, fmt.Sprintf("%s, you are a Spy. You'll win if at least 3 missions are failed.\n\nThe other spies: %s", player.Name, strings.Join(spies, ", ")))
 		}
 	}
 }
