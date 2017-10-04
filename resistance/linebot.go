@@ -87,8 +87,18 @@ func (b *LineBot) replyPostback(event *linebot.Event, title, text string, data .
 	for _, p := range data {
 		actions = append(actions, linebot.NewPostbackTemplateAction(p.Key, p.Value, ""))
 	}
-	message := linebot.NewTemplateMessage(title, linebot.NewButtonsTemplate("", title, text, actions...))
-	_, err := b.client.ReplyMessage(event.ReplyToken, message).Do()
+	var messages []linebot.Message
+	// Send postback every 4 buttons
+	for i := 0; i < len(actions); i += 4 {
+		if i+4 > len(actions) {
+			messages = append(messages, linebot.NewTemplateMessage(title,
+				linebot.NewButtonsTemplate("", title, text, actions[i:]...)))
+		} else {
+			messages = append(messages, linebot.NewTemplateMessage(title,
+				linebot.NewButtonsTemplate("", title, text, actions[i:i+4]...)))
+		}
+	}
+	_, err := b.client.ReplyMessage(event.ReplyToken, messages...).Do()
 	if err != nil {
 		b.log("Error replying postback to %+v: %s", event.Source, err.Error())
 	}
@@ -120,8 +130,18 @@ func (b *LineBot) pushPostback(to string, title, text string, data ...pair) erro
 	for _, p := range data {
 		actions = append(actions, linebot.NewPostbackTemplateAction(p.Key, p.Value, ""))
 	}
-	message := linebot.NewTemplateMessage(title, linebot.NewButtonsTemplate("", title, text, actions...))
-	_, err := b.client.PushMessage(to, message).Do()
+	var messages []linebot.Message
+	// Send postback every 4 buttons
+	for i := 0; i < len(actions); i += 4 {
+		if i+4 > len(actions) {
+			messages = append(messages, linebot.NewTemplateMessage(title,
+				linebot.NewButtonsTemplate("", title, text, actions[i:]...)))
+		} else {
+			messages = append(messages, linebot.NewTemplateMessage(title,
+				linebot.NewButtonsTemplate("", title, text, actions[i:i+4]...)))
+		}
+	}
+	_, err := b.client.PushMessage(to, messages...).Do()
 	if err != nil {
 		b.log("Error pushing postback to %+v: %s", to, err.Error())
 	}
@@ -133,8 +153,18 @@ func (b *LineBot) pushTextback(to string, title, text string, data ...pair) erro
 	for _, p := range data {
 		actions = append(actions, linebot.NewPostbackTemplateAction(p.Key, "?", p.Value))
 	}
-	message := linebot.NewTemplateMessage(title, linebot.NewButtonsTemplate("", title, text, actions...))
-	_, err := b.client.PushMessage(to, message).Do()
+	var messages []linebot.Message
+	// Send postback every 4 buttons
+	for i := 0; i < len(actions); i += 4 {
+		if i+4 > len(actions) {
+			messages = append(messages, linebot.NewTemplateMessage(title,
+				linebot.NewButtonsTemplate("", title, text, actions[i:]...)))
+		} else {
+			messages = append(messages, linebot.NewTemplateMessage(title,
+				linebot.NewButtonsTemplate("", title, text, actions[i:i+4]...)))
+		}
+	}
+	_, err := b.client.PushMessage(to, messages...).Do()
 	if err != nil {
 		b.log("Error pushing postback to %+v: %s", to, err.Error())
 	}
