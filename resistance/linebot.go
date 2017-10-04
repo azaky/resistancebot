@@ -566,7 +566,7 @@ func (b *LineBot) OnStartPick(game *Game, leader *Player) {
 		buttons...)
 	b.push(leader.ID,
 		fmt.Sprintf("You are the current leader. Choose people you trust the most to go for the mission. This mission needs %s people. Choose them wisely.",
-			leader.Name, game.Config.NOverview[game.Round-1]))
+			game.Config.NOverview[game.Round-1]))
 	b.push(game.ID,
 		fmt.Sprintf("Current leader is %s. Choose people you trust the most to go for the mission. This mission needs %s people. Choose them wisely.",
 			leader.Name, game.Config.NOverview[game.Round-1]))
