@@ -649,7 +649,11 @@ func (b *LineBot) OnVotingDone(game *Game, votes map[string]bool, majority bool)
 	if majority {
 		buffer.WriteString("\n\nMajority is reached. Mission will be executed.")
 	} else {
-		buffer.WriteString("\n\nMajority is not reached. Moving on to the next leader.")
+		if game.VotingRound == conf.GameVotingRound {
+			buffer.WriteString("\n\nMajority is not reached.")
+		} else {
+			buffer.WriteString("\n\nMajority is not reached. Moving on to the next leader.")
+		}
 	}
 	b.push(game.ID, buffer.String())
 }
