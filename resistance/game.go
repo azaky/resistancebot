@@ -230,6 +230,7 @@ type EventHandler interface {
 	OnResistanceWin(*Game, string)
 	OnShowPlayers(*Game, []*Player, int, bool)
 	OnInfo(*Game, *Config)
+	OnStartWarning(*Game, int)
 }
 
 var games map[string]*Game = make(map[string]*Game)
@@ -312,6 +313,9 @@ func (game *Game) daemon() {
 	// init:
 	var startError error
 	initTimer := time.NewTimer(time.Duration(conf.GameInitializationTime) * time.Second)
+	// warning timers
+	init30Timer := time.NewTimer(time.Duration(conf.GameInitializationTime-30) * time.Second)
+	init15Timer := time.NewTimer(time.Duration(conf.GameInitializationTime-15) * time.Second)
 
 	for {
 		select {
@@ -333,6 +337,14 @@ func (game *Game) daemon() {
 			log.Println("c:initTimer")
 			startError = game.start("timer")
 			goto start
+
+		case <-init30Timer.C:
+			log.Println("c:init30Timer")
+			go game.OnStartWarning(game, 30)
+
+		case <-init15Timer.C:
+			log.Println("c:init15Timer")
+			go game.OnStartWarning(game, 15)
 
 		case aborter := <-game.cAbortData:
 			log.Println("c:abort")

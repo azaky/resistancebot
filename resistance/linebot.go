@@ -499,6 +499,10 @@ func (b *LineBot) OnAbort(game *Game, aborter *Player) {
 	}
 }
 
+func (b *LineBot) OnStartWarning(game *Game, seconds int) {
+	b.push(game.ID, fmt.Sprintf("Game will be started in %d seconds", seconds))
+}
+
 func (b *LineBot) OnStart(game *Game, starter *Player, c *Config, err error) {
 	if err != nil {
 		b.push(game.ID, err.Error())
